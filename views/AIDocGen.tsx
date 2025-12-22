@@ -36,8 +36,22 @@ const AIDocGen: React.FC = () => {
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(result);
-    setCopied(true);
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(result).then(() => setCopied(true));
+    } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = result;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            setCopied(true);
+        } catch (e) {}
+        document.body.removeChild(textArea);
+    }
     setTimeout(() => setCopied(false), 2000);
   };
 

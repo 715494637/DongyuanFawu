@@ -7,6 +7,7 @@ interface FieldSpec {
   icon: any;
   placeholder: string;
   suggestions?: string[];
+  type?: string; // Add input type support
 }
 
 interface Template {
@@ -23,20 +24,27 @@ const TEMPLATES: Template[] = [
     fields: [
       { name: '停产类型', icon: Zap, placeholder: '如：临时停电', suggestions: ['临时停水', '紧急停电', '计划性停电', '设备检修停水'] },
       { name: '影响范围', icon: MapPin, placeholder: '如：1-3号楼', suggestions: ['全区业主', '地下停车场', '商铺区域'] },
-      { name: '开始时间', icon: Clock, placeholder: '2025年3月1日 09:00' },
-      { name: '预计结束时间', icon: Clock, placeholder: '当日 18:00' },
+      { name: '开始时间', icon: Clock, placeholder: '选择开始时间', type: 'datetime-local' },
+      { name: '预计结束时间', icon: Clock, placeholder: '选择结束时间', type: 'datetime-local' },
       { name: '原因', icon: Info, placeholder: '如：变压器扩容', suggestions: ['自来水管爆裂', '电网检修', '消防水箱清洗', '市政施工'] }
     ],
-    render: (f: any) => `【紧急公告：${f['停产类型'] || '____'}通知】\n\n尊敬的业主：\n    因 ${f['原因'] || '____'}，物业中心拟定于 ${f['开始时间'] || '____'} 至 ${f['预计结束时间'] || '____'} 对 ${f['影响范围'] || '____'} 进行${f['停产类型'] || '____'}作业。请大家提前做好蓄水/准备工作。给您带来不便，敬请谅解。\n\n东元物业服务中心\n日期：[当前日期]`
+    render: (f: any) => {
+        const start = f['开始时间'] ? new Date(f['开始时间']).toLocaleString() : '____';
+        const end = f['预计结束时间'] ? new Date(f['预计结束时间']).toLocaleString() : '____';
+        return `【紧急公告：${f['停产类型'] || '____'}通知】\n\n尊敬的业主：\n    因 ${f['原因'] || '____'}，物业中心拟定于 ${start} 至 ${end} 对 ${f['影响范围'] || '____'} 进行${f['停产类型'] || '____'}作业。请大家提前做好蓄水/准备工作。给您带来不便，敬请谅解。\n\n东元物业服务中心\n日期：[当前日期]`;
+    }
   },
   {
     id: 'cleanup',
     title: '杂物清理告知',
     fields: [
       { name: '清理区域', icon: MapPin, placeholder: '如：楼道消防通道', suggestions: ['天台公共区域', '地下负二层', '非机动车车库'] },
-      { name: '截止日期', icon: Clock, placeholder: '2025年3月5日' }
+      { name: '截止日期', icon: Clock, placeholder: '选择截止日期', type: 'date' }
     ],
-    render: (f: any) => `【温馨提示：公共区域清理公告】\n\n各位业主：\n    为消除消防隐患，保持小区环境整洁，物业中心将于近日开展“春雷行动”。请于 ${f['截止日期'] || '____'} 前将您放置在 ${f['清理区域'] || '____'} 的个人私人物品及时移走。逾期未清理的杂物将视为无主物进行集中处理。感谢您的配合与理解。`
+    render: (f: any) => {
+        const date = f['截止日期'] ? new Date(f['截止日期']).toLocaleDateString() : '____';
+        return `【温馨提示：公共区域清理公告】\n\n各位业主：\n    为消除消防隐患，保持小区环境整洁，物业中心将于近日开展“春雷行动”。请于 ${date} 前将您放置在 ${f['清理区域'] || '____'} 的个人私人物品及时移走。逾期未清理的杂物将视为无主物进行集中处理。感谢您的配合与理解。`;
+    }
   }
 ];
 
@@ -54,8 +62,27 @@ const NoticeGenerator: React.FC = () => {
   const resultText = activeTpl.render(formData).replace('[当前日期]', new Date().toLocaleDateString());
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(resultText);
-    setCopied(true);
+    const text = resultText;
+    // Fallback copy method for non-secure contexts
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => setCopied(true));
+    } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            setCopied(true);
+        } catch (err) {
+            console.error('Copy failed', err);
+            alert('复制失败，请长按文本手动复制。');
+        }
+        document.body.removeChild(textArea);
+    }
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -114,7 +141,7 @@ const NoticeGenerator: React.FC = () => {
                 </div>
                 
                 <input 
-                  type="text" 
+                  type={field.type || 'text'}
                   value={formData[field.name] || ''}
                   onChange={(e) => updateField(field.name, e.target.value)}
                   onFocus={() => setFocusedField(field.name)}

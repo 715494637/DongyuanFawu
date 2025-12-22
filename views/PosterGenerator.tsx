@@ -162,12 +162,12 @@ const PosterGenerator: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   };
 
   const handleDownload = () => {
-    // 提示用户
-    alert('海报高清渲染完成，请长按上方预览图进行“保存到相册”或“发送给朋友”。');
+    // Clarify instructions as web browser screenshot is the most reliable way without external heavy libs
+    alert('由于浏览器安全限制，请【长按上方海报区域】选择“添加到照片”或“发送给朋友”以保存高清原图。');
   };
 
   return (
-    <div className="p-5 space-y-6 animate-fade-in pb-24">
+    <div className="p-4 space-y-6 animate-fade-in pb-24">
       
       {/* 风格选择器 */}
       <div className="space-y-3">
@@ -190,21 +190,22 @@ const PosterGenerator: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </div>
       </div>
 
-      {/* 海报预览核心区 */}
+      {/* 海报预览核心区 - Optimized for display within viewport */}
       <div className="flex flex-col items-center">
         <div 
           ref={posterRef}
-          className="w-full aspect-[3/4] rounded-[2rem] relative overflow-hidden shadow-2xl flex flex-col transition-all duration-500"
+          className="w-full aspect-[3/4] rounded-[2rem] relative overflow-hidden shadow-2xl flex flex-col transition-all duration-500 select-none"
+          // Prevent text selection to make it feel more like an image
         >
           {/* 渲染背景层 (支持自定义图片) */}
           {selectedTpl.renderBg()}
           
           {/* 内容层 - 使用 Flex 布局确保居中和分布 */}
-          <div className="relative z-10 w-full h-full flex flex-col p-8">
+          <div className="relative z-10 w-full h-full flex flex-col p-6 sm:p-8">
             
             {/* 顶部：Logo 与 编号 */}
-            <div className="flex justify-between items-start mb-8">
-               <div className="h-10 px-2 py-1 bg-white/10 backdrop-blur-md rounded-lg border border-white/20 flex items-center">
+            <div className="flex justify-between items-start mb-6">
+               <div className="h-8 sm:h-10 px-2 py-1 bg-white/10 backdrop-blur-md rounded-lg border border-white/20 flex items-center">
                  {logoUrl ? (
                    <img src={logoUrl} className="h-full object-contain" alt="Logo" />
                  ) : (
@@ -220,28 +221,28 @@ const PosterGenerator: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             {/* 中部：核心信息 */}
             <div className="flex-1 flex flex-col items-center justify-center text-center">
               {/* 图标容器 */}
-              <div className={`w-24 h-24 rounded-[2rem] flex items-center justify-center mb-8 shadow-2xl backdrop-blur-sm border border-white/10 ${selectedTpl.accentColorClass} bg-opacity-80`}>
-                <selectedTpl.icon size={48} className="text-white drop-shadow-md" />
+              <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-[2rem] flex items-center justify-center mb-6 shadow-2xl backdrop-blur-sm border border-white/10 ${selectedTpl.accentColorClass} bg-opacity-80`}>
+                <selectedTpl.icon size={40} className="text-white drop-shadow-md sm:scale-125" />
               </div>
               
               {/* 标题 */}
-              <h1 className={`text-4xl font-black mb-6 leading-tight tracking-tight drop-shadow-xl ${selectedTpl.textColorClass}`}>
+              <h1 className={`text-3xl sm:text-4xl font-black mb-4 leading-tight tracking-tight drop-shadow-xl ${selectedTpl.textColorClass}`}>
                 {title || '请输入标题'}
               </h1>
               
               {/* 装饰线 */}
-              <div className="w-12 h-1.5 bg-white/30 rounded-full mb-8 backdrop-blur-md"></div>
+              <div className="w-12 h-1.5 bg-white/30 rounded-full mb-6 backdrop-blur-md"></div>
               
               {/* 正文 */}
-              <div className={`text-sm leading-7 font-medium px-2 tracking-wide drop-shadow-md opacity-90 ${selectedTpl.textColorClass}`}>
+              <div className={`text-xs sm:text-sm leading-6 font-medium px-2 tracking-wide drop-shadow-md opacity-90 ${selectedTpl.textColorClass}`}>
                 {content || '请输入正文内容...'}
               </div>
             </div>
 
             {/* 底部：落款 */}
-            <div className="mt-auto pt-8 flex flex-col items-center space-y-3">
-              <div className="px-6 py-2.5 bg-white/10 backdrop-blur-xl rounded-full border border-white/10 shadow-lg">
-                <span className={`text-[11px] font-black uppercase tracking-widest ${selectedTpl.textColorClass}`}>
+            <div className="mt-auto pt-6 flex flex-col items-center space-y-3">
+              <div className="px-6 py-2 bg-white/10 backdrop-blur-xl rounded-full border border-white/10 shadow-lg">
+                <span className={`text-[10px] font-black uppercase tracking-widest ${selectedTpl.textColorClass}`}>
                    {enterprise}
                 </span>
               </div>
@@ -308,7 +309,7 @@ const PosterGenerator: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           onClick={handleDownload}
           className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-xl"
         >
-          <Download size={16} /> 保存高清海报到相册
+          <Download size={16} /> 保存高清海报
         </button>
       </div>
 

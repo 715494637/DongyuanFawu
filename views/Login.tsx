@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Lock, ArrowRight, CheckCircle2, Circle, X, FileText, ChevronRight, Smartphone, KeyRound, Building, UserPlus, Check } from 'lucide-react';
+import { User, Lock, ArrowRight, CheckCircle2, Circle, X, FileText, ChevronRight, Smartphone, KeyRound, Building, UserPlus, Check, Zap } from 'lucide-react';
 import { db } from '../services/dbService';
 import { User as UserType, UserRole, ApprovalStatus } from '../types';
 
@@ -11,7 +11,7 @@ interface LoginProps {
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [loginMethod, setLoginMethod] = useState<'password' | 'phone'>('password');
   const [enablePhoneLogin, setEnablePhoneLogin] = useState(true);
-  const [rememberMe, setRememberMe] = useState(true); // 默认为 true，提升体验
+  const [rememberMe, setRememberMe] = useState(true);
 
   // 密码登录状态
   const [username, setUsername] = useState('');
@@ -99,8 +99,29 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
 
     if (found && checkApprovalStatus(found)) {
-      // 传递 rememberMe 状态
       onLogin(found, rememberMe);
+    }
+  };
+
+  const handleOneClickLogin = () => {
+    if (!agreed) {
+        setError('请先阅读并同意服务协议');
+        return;
+    }
+    
+    // 模拟一键登录，优先查找演示账号，若无则查找任一可用账号
+    let demoUser = db.getUserByPhone('13900000000'); 
+    
+    if (!demoUser) {
+        // Fallback: Find the first user with a phone number that is approved
+        const users = db.getUsers();
+        demoUser = users.find(u => u.phoneNumber && (!u.approvalStatus || u.approvalStatus === 'APPROVED'));
+    }
+    
+    if (demoUser && checkApprovalStatus(demoUser)) {
+        onLogin(demoUser, rememberMe);
+    } else {
+        setError('本机号码未绑定有效账号，请注册');
     }
   };
 
@@ -299,7 +320,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </div>
             )}
             
-            {/* 自动登录 (Remember Me) 选项 - 新增功能 */}
+            {/* 自动登录 (Remember Me) 选项 */}
             <div className="flex justify-between items-center px-2 mt-1">
                <div 
                  onClick={() => setRememberMe(!rememberMe)}
@@ -325,6 +346,21 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             >
               {loginMethod === 'password' ? '登 录' : '验证并登录'} <ArrowRight size={16} strokeWidth={3} />
             </button>
+
+            {/* 一键登录按钮 (Only in phone mode) */}
+            {loginMethod === 'phone' && (
+                <button 
+                  type="button"
+                  onClick={handleOneClickLogin}
+                  className={`w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all mt-3 border cursor-pointer active:scale-95 ${
+                    agreed 
+                    ? 'bg-white/10 text-white border-white/30 hover:bg-white/20' 
+                    : 'bg-white/5 text-white/60 border-white/10 hover:bg-white/10'
+                  }`}
+                >
+                  <Zap size={16} className={agreed ? "text-yellow-300" : "text-white/40"} /> 本机号码一键登录
+                </button>
+            )}
 
             {/* 注册链接 */}
             <div className="flex justify-center mt-4">

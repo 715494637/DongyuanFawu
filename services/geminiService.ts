@@ -39,9 +39,17 @@ export const sendMessageToAI = async (message: string, useSearch: boolean = fals
     return response.text || "抱歉，法律智脑暂时未生成有效回复，请重试。";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    // 增加更具体的错误反馈
     const errorMsg = error instanceof Error ? error.message : "未知错误";
-    return `系统处理中遇到问题 (${errorMsg})，请联系技术中心或稍后重试。`;
+    
+    // Friendly error messages for common issues
+    if (errorMsg.includes('429') || errorMsg.includes('quota')) {
+        return "当前咨询人数过多，AI 助手暂时繁忙。请等待 1-2 分钟后重试。";
+    }
+    if (errorMsg.includes('400') || errorMsg.includes('invalid')) {
+        return "系统配置更新中，请联系管理员检查 API 密钥设置。";
+    }
+    
+    return `系统处理中遇到问题，请稍后重试。`;
   }
 };
 

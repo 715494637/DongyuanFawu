@@ -60,6 +60,29 @@ const Calculator: React.FC = () => {
     }
   };
 
+  const copyText = () => {
+    const text = getLetterContent();
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板'));
+    } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            alert('已复制到剪贴板');
+        } catch (err) {
+            console.error('Copy failed', err);
+            alert('复制失败');
+        }
+        document.body.removeChild(textArea);
+    }
+  };
+
   return (
     <div className="bg-white min-h-full p-6 animate-fade-in">
       <div className="space-y-6">
@@ -163,7 +186,10 @@ const Calculator: React.FC = () => {
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button className="flex-1 bg-green-500 text-white py-3.5 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-500/20 active:scale-95 transition-all">
+                <button 
+                  onClick={copyText}
+                  className="flex-1 bg-green-500 text-white py-3.5 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-500/20 active:scale-95 transition-all"
+                >
                   <Share2 size={16} /> 复制文本
                 </button>
                 <button className="flex-1 bg-slate-900 text-white py-3.5 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">

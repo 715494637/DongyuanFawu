@@ -133,7 +133,21 @@ const Diagnosis: React.FC<DiagnosisProps> = ({ setCurrentView }) => {
 
   const copyScript = () => {
     const script = "【管家安抚话术】\n“您好，您的诉求我们已经详细记录。关于您提到的问题，依据《物业服务合同》及相关法规，我们需要先进行现场勘验/核实。为了保障您的合法权益，建议我们先签署一份《情况确认单》，后续我们会请法务部门出具正式的书面回复。请您放心，我们一定依法依规处理。”";
-    navigator.clipboard.writeText(script);
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(script);
+    } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = script;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+        } catch (e) {}
+        document.body.removeChild(textArea);
+    }
     alert('标准话术已复制，可发送给一线管家。');
   };
 
