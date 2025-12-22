@@ -1,0 +1,8 @@
+{
+  "name": "东元法物",
+  "description": "专为物业公司打造的数字化法律服务工具包，包含催收计算、纠纷诊断、风险自查及AI法律助理。",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
