@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Lock, ArrowRight, CheckCircle2, Circle, X, FileText, ChevronRight, Smartphone, KeyRound, Building, UserPlus, Check, Zap } from 'lucide-react';
 import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 import { User as UserType, UserRole, ApprovalStatus } from '../types';
 
 interface LoginProps {
@@ -68,38 +69,40 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     return true;
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreed) {
       setError('请先阅读并同意服务协议');
       return;
     }
 
-    const users = db.getUsers();
-    let found: UserType | undefined;
+    try {
+      let response;
 
-    if (loginMethod === 'password') {
-       const cleanUsername = username.trim();
-       const cleanPassword = password.trim();
-       found = users.find(u => u.username === cleanUsername && u.password === cleanPassword);
-       if (!found) {
-         setError('账户或密码验证失败');
-         return;
-       }
-    } else {
-       if (verifyCode !== '8888') {
-         setError('验证码错误');
-         return;
-       }
-       found = db.getUserByPhone(phoneNumber.trim());
-       if (!found) {
-         setError('该手机号未注册');
-         return;
-       }
-    }
+      if (loginMethod === 'password') {
+        response = await api.login(username.trim(), password.trim());
+      } else {
+        if (verifyCode !== '8888') {
+          setError('验证码错误');
+          return;
+        }
+        // 手机号登录使用特殊标识
+        response = await api.login(phoneNumber.trim(), 'phone-login');
+      }
 
-    if (found && checkApprovalStatus(found)) {
-      onLogin(found, rememberMe);
+      if (response.access_token) {
+        // 存储token
+        if (rememberMe) {
+          localStorage.setItem('token', response.access_token);
+        } else {
+          sessionStorage.setItem('token', response.access_token);
+        }
+        onLogin(response.user, rememberMe);
+      } else {
+        setError(response.detail || '登录失败，请重试');
+      }
+    } catch (error) {
+      setError('登录失败，请重试');
     }
   };
 
@@ -125,43 +128,49 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
   };
 
-  const sendCode = () => {
+  const sendCode = async () => {
     if (!phoneNumber || phoneNumber.length !== 11) {
       setError('请输入有效的11位手机号');
       return;
     }
-    setError('');
-    setCountdown(60);
-    alert('【东元法物】验证码已发送：8888');
+    try {
+      await api.sendSms(phoneNumber.trim());
+      setError('');
+      setCountdown(60);
+      alert('验证码已发送，请使用8888进行验证');
+    } catch (error) {
+      setError('发送验证码失败，请重试');
+    }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regUsername || !regPassword || !regPhone || !regEnterprise) {
       setRegError('请填写完整信息');
       return;
     }
-    
+
     try {
-      db.registerUser({
-        id: Date.now().toString(),
+      const response = await api.register({
         username: regUsername.trim(),
         password: regPassword.trim(),
         phoneNumber: regPhone.trim(),
-        role: UserRole.USER,
-        enterpriseName: regEnterprise,
-        isCertified: false,
-        approvalStatus: 'PENDING'
+        enterprise_name: regEnterprise
       });
-      alert('注册申请已提交！请等待管理员审核。');
-      setShowRegister(false);
-      setRegUsername('');
-      setRegPassword('');
-      setRegPhone('');
-      setRegEnterprise('');
-      setRegError('');
+
+      if (response.message) {
+        alert('注册申请已提交！请等待管理员审核。');
+        setShowRegister(false);
+        setRegUsername('');
+        setRegPassword('');
+        setRegPhone('');
+        setRegEnterprise('');
+        setRegError('');
+      } else {
+        setRegError(response.detail || '注册失败');
+      }
     } catch (err: any) {
-      setRegError(err.message);
+      setRegError('注册失败，请重试');
     }
   };
 

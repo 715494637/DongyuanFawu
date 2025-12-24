@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  LayoutDashboard, Users, BookOpen, BrainCircuit, 
-  Plus, Trash2, ShieldCheck, UserPlus, 
+import {
+  LayoutDashboard, Users, BookOpen, BrainCircuit,
+  Plus, Trash2, ShieldCheck, UserPlus,
   Edit3, X, ListFilter, Camera, Scale, Save, Image as ImageIcon, Upload, Headphones, Settings, MonitorPlay, Building, Smartphone, Check, UserCheck, XCircle, MessageSquare
 } from 'lucide-react';
 import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 import { DocumentItem, RiskScenario, User, UserRole, EvidenceGroup, LawArticle, CustomPosterTemplate, ContactQRCode, SystemConfig } from '../types';
 
 const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
@@ -59,30 +60,76 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
     refreshData();
   }, []);
 
-  const refreshData = () => {
-    setKbText(db.getAIKB());
-    setDocs(db.getDocs());
-    setCategories(db.getCategories());
-    setRiskScenarios(db.getCheckScenarios());
-    setEvidenceList(db.getEvidenceList());
-    setLawArticles(db.getCivilCode());
-    setUsers(db.getUsers());
-    setEnterprises(db.getEnterprises()); 
-    setCustomPosters(db.getCustomPosters());
-    setContactQRs(db.getContactQRCodes());
-    setSplashImage(db.getSplashImage());
-    setSystemConfig(db.getSystemConfig());
+  const refreshData = async () => {
+    try {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+
+      // 并行获取所有数据
+      const [
+        configData,
+        docsData,
+        risksData,
+        evidenceData,
+        lawsData,
+        usersData,
+        enterprisesData,
+        postersData,
+        qrData
+      ] = await Promise.all([
+        api.getConfig(),
+        api.getDocuments(),
+        api.getRisks(),
+        api.getEvidence(),
+        api.getCivilCode(),
+        api.getUsers(token!),
+        api.getEnterprises(),
+        api.getPosters(),
+        api.getContactQR()
+      ]);
+
+      setSystemConfig({
+        enable_phone_login: configData.enable_phone_login,
+        welcome_message: configData.welcome_message
+      });
+      setKbText(configData.ai_knowledge_base || '');
+      setDocs(docsData);
+      setRiskScenarios(risksData);
+      setEvidenceList(evidenceData);
+      setLawArticles(lawsData);
+      setUsers(usersData);
+      setEnterprises(enterprisesData);
+      setCustomPosters(postersData);
+      setContactQRs(qrData);
+
+      // 从文档中提取分类
+      const uniqueCategories = Array.from(new Set(docsData.map((doc: any) => doc.category)));
+      setCategories(['全部', ...uniqueCategories]);
+
+    } catch (error) {
+      console.error('加载数据失败:', error);
+      alert('加载数据失败，请重新登录');
+    }
   };
 
-  const saveKB = () => {
-    db.saveAIKB(kbText);
-    alert('AI 知识库与系统指令已同步成功。');
+  const saveKB = async () => {
+    try {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      await api.updateConfig({ ai_knowledge_base: kbText }, token!);
+      alert('AI 知识库与系统指令已同步成功。');
+    } catch (error) {
+      alert('保存失败，请重试');
+    }
   };
 
-  const handleConfigChange = (newConfig: Partial<SystemConfig>) => {
-    const updated = { ...systemConfig, ...newConfig };
-    setSystemConfig(updated);
-    db.saveSystemConfig(updated);
+  const handleConfigChange = async (newConfig: Partial<SystemConfig>) => {
+    try {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const updated = { ...systemConfig, ...newConfig };
+      await api.updateConfig(updated, token!);
+      setSystemConfig(updated);
+    } catch (error) {
+      alert('配置更新失败，请重试');
+    }
   };
 
   // --- Splash Config Logic ---
@@ -108,17 +155,27 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
   };
 
   // --- User Approval Logic ---
-  const handleApproveUser = (userId: string) => {
+  const handleApproveUser = async (userId: string) => {
     if (confirm('确定批准该用户注册申请吗？')) {
-      db.updateUser(userId, { approvalStatus: 'APPROVED', isCertified: true });
-      refreshData();
+      try {
+        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+        await api.approveUser(userId, token!);
+        refreshData();
+      } catch (error) {
+        alert('审批失败，请重试');
+      }
     }
   };
 
-  const handleRejectUser = (userId: string) => {
+  const handleRejectUser = async (userId: string) => {
     if (confirm('确定拒绝该用户注册申请吗？')) {
-      db.updateUser(userId, { approvalStatus: 'REJECTED', isCertified: false });
-      refreshData();
+      try {
+        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+        await api.deleteUser(userId, token!);
+        refreshData();
+      } catch (error) {
+        alert('删除用户失败，请重试');
+      }
     }
   };
 
