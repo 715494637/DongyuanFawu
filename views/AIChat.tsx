@@ -1,22 +1,23 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Bot, User, Volume2, Globe, Sparkles, Headphones } from 'lucide-react';
+import { Send, Bot, User, Volume2, Globe, Sparkles } from 'lucide-react';
 import { ChatMessage } from '../types';
 import { sendMessageToAI, textToSpeech, decodeAudioData } from '../services/geminiService';
-import ConsultationModal from '../components/ConsultationModal';
-import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 
 const AIChat: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const config = db.getSystemConfig();
-    const welcomeText = config.welcomeMessage || '您好！我是东元物业法务助手。我可以为您提供《民法典》咨询、文书草拟及风险建议。（回答仅供参考）';
-    return [{ id: '0', role: 'model', text: welcomeText, timestamp: Date.now() }];
-  });
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: '0',
+      role: 'model',
+      text: '您好！我是东元物业法务助手。我可以为您提供《民法典》咨询、文书草拟及风险建议。（回答仅供参考）',
+      timestamp: Date.now()
+    }
+  ]);
   
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [useSearch, setUseSearch] = useState(true);
-  const [showConsult, setShowConsult] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
 
@@ -139,22 +140,15 @@ const AIChat: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       </div>
 
       <div className="p-4 bg-white border-t border-gray-100 space-y-3">
-        {/* Level 3 Funnel: Connect to Human */}
-        <div className="flex items-center justify-between px-2">
-           <button 
-             className="text-[10px] font-bold text-slate-500 flex items-center gap-1 hover:text-orange-600 transition-colors"
-             onClick={() => setShowConsult(true)}
-           >
-             <Headphones size={12} /> 转人工咨询
-           </button>
-           <button 
+        <div className="flex justify-end">
+           <button
              onClick={() => setUseSearch(!useSearch)}
              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold transition-all ${useSearch ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-400'}`}
            >
              <Globe size={12} /> {useSearch ? '已开启实时检索' : '仅本地知识库'}
            </button>
         </div>
-        
+
         <div className="flex items-center gap-2 bg-gray-50 px-4 py-3 rounded-2xl border border-gray-200 focus-within:border-orange-500/50 focus-within:ring-4 focus-within:ring-orange-500/5 transition-all">
           <input 
             type="text" 
@@ -179,7 +173,6 @@ const AIChat: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </p>
       </div>
 
-      <ConsultationModal isOpen={showConsult} onClose={() => setShowConsult(false)} />
     </div>
   );
 };

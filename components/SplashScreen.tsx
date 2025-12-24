@@ -1,16 +1,24 @@
 
 import React, { useState, useEffect } from 'react';
-import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 
 const SplashScreen: React.FC = () => {
   const [customImage, setCustomImage] = useState<string | null>(null);
 
   useEffect(() => {
-    // 检查是否存在管理员上传的自定义开屏图
-    const saved = db.getSplashImage();
-    if (saved) {
-      setCustomImage(saved);
-    }
+    // 从专门的开屏图API获取自定义开屏图
+    const loadSplashImage = async () => {
+      try {
+        const response = await api.getSplashImage();
+        if (response.splash_image) {
+          setCustomImage(response.splash_image);
+        }
+      } catch (error) {
+        console.error('Failed to load splash image:', error);
+      }
+    };
+
+    loadSplashImage();
   }, []);
 
   if (customImage) {

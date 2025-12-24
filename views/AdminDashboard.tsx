@@ -5,12 +5,16 @@ import {
   Plus, Trash2, ShieldCheck, UserPlus,
   Edit3, X, ListFilter, Camera, Scale, Save, Image as ImageIcon, Upload, Headphones, Settings, MonitorPlay, Building, Smartphone, Check, UserCheck, XCircle, MessageSquare
 } from 'lucide-react';
-import { db } from '../services/dbService';
 import { api } from '../services/apiService';
 import { DocumentItem, RiskScenario, User, UserRole, EvidenceGroup, LawArticle, CustomPosterTemplate, ContactQRCode, SystemConfig } from '../types';
 
 const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState<'kb' | 'docs' | 'risk' | 'evidence' | 'laws' | 'users' | 'companies' | 'posters' | 'contact' | 'config'>('kb');
+
+  // 获取token的辅助函数
+  const getToken = () => {
+    return localStorage.getItem('token') || sessionStorage.getItem('token');
+  };
   
   // Data States
   const [kbText, setKbText] = useState('');
@@ -92,6 +96,11 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         welcome_message: configData.welcome_message
       });
       setKbText(configData.ai_knowledge_base || '');
+
+      // 设置开屏图
+      if (configData.splash_image) {
+        setSplashImage(configData.splash_image);
+      }
       setDocs(docsData);
       setRiskScenarios(risksData);
       setEvidenceList(evidenceData);
@@ -133,24 +142,37 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
   };
 
   // --- Splash Config Logic ---
-  const handleSplashUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSplashUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (ev) => {
+      reader.onload = async (ev) => {
         const base64 = ev.target?.result as string;
-        db.saveSplashImage(base64);
-        setSplashImage(base64);
-        alert('开屏图已更新，下次启动应用时生效。');
+        try {
+          const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+          await api.uploadSplashImage({ splash_image: base64 }, token!);
+          setSplashImage(base64);
+          alert('开屏图已更新，下次启动应用时生效。');
+        } catch (error) {
+          console.error('Failed to upload splash image:', error);
+          alert('上传开屏图失败，请重试。');
+        }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleResetSplash = () => {
+  const handleResetSplash = async () => {
     if (confirm('确定要恢复默认的品牌开屏动画吗？')) {
-      db.saveSplashImage(null);
-      setSplashImage(null);
+      try {
+        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+        await api.deleteSplashImage(token!);
+        setSplashImage(null);
+        alert('开屏图已恢复默认。');
+      } catch (error) {
+        console.error('Failed to delete splash image:', error);
+        alert('恢复默认开屏图失败，请重试。');
+      }
     }
   };
 
@@ -181,16 +203,38 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
 
   // ... (保留原有的 handleSaveDoc, handleAddCategory, handleAddCompany, etc. 逻辑不变，为了节省篇幅略去重复函数，仅需确保逻辑存在)
   // --- Document Logic ---
-  const handleSaveDoc = (e: React.FormEvent) => {
+  const handleSaveDoc = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDoc) return;
-    const allDocs = db.getDocs();
-    const existingIdx = allDocs.findIndex(d => d.id === editingDoc.id);
-    if (existingIdx > -1) { allDocs[existingIdx] = editingDoc; } 
-    else { allDocs.unshift(editingDoc); }
-    db.saveDocs(allDocs);
-    refreshData();
-    setEditingDoc(null);
+
+    try {
+      const token = getToken();
+      if (!token) {
+        alert('请先登录');
+        return;
+      }
+
+      const docData = {
+        title: editingDoc.title,
+        category: editingDoc.category,
+        description: editingDoc.description,
+        content: editingDoc.content
+      };
+
+      if (editingDoc.id) {
+        // 更新现有文档
+        await api.updateDocument(editingDoc.id, docData, token);
+      } else {
+        // 创建新文档
+        await api.createDocument(docData, token);
+      }
+
+      refreshData();
+      setEditingDoc(null);
+    } catch (error) {
+      console.error('保存文档失败:', error);
+      alert('保存文档失败，请重试');
+    }
   };
 
   const handleAddCategory = () => {
@@ -200,95 +244,209 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
       return;
     }
     const updated = [...categories, newCatName.trim()];
-    db.saveCategories(updated);
+    // 注意：后端目前没有_categories独立的API，分类存储在文档中
+    // 这里先在前端维护，后续可以考虑添加分类管理API
     setCategories(updated);
     setNewCatName('');
   };
 
   const handleDeleteCategory = (cat: string) => {
     if (cat === '全部') {
-      alert('无法删除“全部”分类');
+      alert('无法删除"全部"分类');
       return;
     }
-    if (confirm(`确定删除分类“${cat}”吗？`)) {
+    if (confirm(`确定删除分类"${cat}"吗？`)) {
       const updated = categories.filter(c => c !== cat);
-      db.saveCategories(updated);
+      // 注意：后端目前没有_categories独立的API，分类存储在文档中
+      // 这里先在前端维护，后续可以考虑添加分类管理API
       setCategories(updated);
     }
   };
 
   // --- Enterprise Logic ---
-  const handleAddCompany = () => {
+  const handleAddCompany = async () => {
     if (!newCompanyName.trim()) return;
     if (enterprises.includes(newCompanyName.trim())) {
       alert('该公司名称已存在');
       return;
     }
-    db.addEnterprise(newCompanyName.trim());
-    refreshData();
-    setNewCompanyName('');
-    setShowCompanyModal(false);
+
+    try {
+      const token = getToken();
+      if (!token) {
+        alert('请先登录');
+        return;
+      }
+
+      await api.createEnterprise(newCompanyName.trim(), token);
+      refreshData();
+      setNewCompanyName('');
+      setShowCompanyModal(false);
+    } catch (error) {
+      console.error('添加公司失败:', error);
+      alert('添加公司失败，请重试');
+    }
   };
 
-  const handleDeleteCompany = (name: string) => {
-    if (confirm(`确定删除物业公司“${name}”吗？\n删除后，隶属于该公司的员工账号可能显示异常。`)) {
-      db.deleteEnterprise(name);
-      refreshData();
+  const handleDeleteCompany = async (name: string) => {
+    if (confirm(`确定删除物业公司"${name}"吗？\n删除后，隶属于该公司的员工账号可能显示异常。`)) {
+      try {
+        const token = getToken();
+        if (!token) {
+          alert('请先登录');
+          return;
+        }
+
+        await api.deleteEnterprise(name, token);
+        refreshData();
+      } catch (error) {
+        console.error('删除公司失败:', error);
+        alert('删除公司失败，请重试');
+      }
     }
   };
 
   // --- Risk Logic ---
-  const handleSaveRisk = (e: React.FormEvent) => {
+  const handleSaveRisk = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRisk) return;
-    const all = db.getCheckScenarios();
-    const idx = all.findIndex(d => d.id === editingRisk.id);
-    if (idx > -1) { all[idx] = editingRisk; } else { all.push(editingRisk); }
-    db.saveCheckScenarios(all);
-    refreshData();
-    setEditingRisk(null);
+
+    try {
+      const token = getToken();
+      if (!token) {
+        alert('请先登录');
+        return;
+      }
+
+      const riskData = {
+        title: editingRisk.title,
+        risk_level: editingRisk.risk_level,
+        content: editingRisk.content,
+        questions: editingRisk.questions || []
+      };
+
+      if (editingRisk.id) {
+        // 更新现有风险场景
+        await api.updateRisk(editingRisk.id, riskData, token);
+      } else {
+        // 创建新风险场景
+        await api.createRisk(riskData, token);
+      }
+
+      refreshData();
+      setEditingRisk(null);
+    } catch (error) {
+      console.error('保存风险场景失败:', error);
+      alert('保存风险场景失败，请重试');
+    }
   };
 
   // --- Evidence Logic ---
-  const handleSaveEvidence = (e: React.FormEvent) => {
+  const handleSaveEvidence = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingEvidence) return;
-    const all = db.getEvidenceList();
-    const idx = all.findIndex(d => d.id === editingEvidence.id);
-    if (idx > -1) { all[idx] = editingEvidence; } else { all.push(editingEvidence); }
-    db.saveEvidenceList(all);
-    refreshData();
-    setEditingEvidence(null);
+
+    try {
+      const token = getToken();
+      if (!token) {
+        alert('请先登录');
+        return;
+      }
+
+      const evidenceData = {
+        title: editingEvidence.title,
+        items: editingEvidence.items || []
+      };
+
+      if (editingEvidence.id) {
+        // 更新现有证据清单
+        await api.updateEvidence(editingEvidence.id, evidenceData, token);
+      } else {
+        // 创建新证据清单
+        await api.createEvidence(evidenceData, token);
+      }
+
+      refreshData();
+      setEditingEvidence(null);
+    } catch (error) {
+      console.error('保存证据清单失败:', error);
+      alert('保存证据清单失败，请重试');
+    }
   };
 
   // --- Law Logic ---
-  const handleSaveLaw = (e: React.FormEvent) => {
+  const handleSaveLaw = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingLaw) return;
-    const all = db.getCivilCode();
-    const idx = all.findIndex(d => d.id === editingLaw.id);
-    if (idx > -1) { all[idx] = editingLaw; } else { all.push(editingLaw); }
-    db.saveCivilCode(all);
-    refreshData();
-    setEditingLaw(null);
+
+    try {
+      const token = getToken();
+      if (!token) {
+        alert('请先登录');
+        return;
+      }
+
+      const lawData = {
+        title: editingLaw.title,
+        content: editingLaw.content
+      };
+
+      if (editingLaw.id) {
+        // 更新现有民法典条文
+        await api.updateCivilCode(editingLaw.id, lawData, token);
+      } else {
+        // 创建新民法典条文
+        await api.createCivilCode(lawData, token);
+      }
+
+      refreshData();
+      setEditingLaw(null);
+    } catch (error) {
+      console.error('保存民法典条文失败:', error);
+      alert('保存民法典条文失败，请重试');
+    }
   };
 
   // --- User Logic ---
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
-    
+
     if (editingUser.role === UserRole.USER && !editingUser.enterpriseName) {
       alert('请选择该员工所属的物业公司');
       return;
     }
 
-    const allUsers = db.getUsers();
-    const existingIdx = allUsers.findIndex(u => u.id === editingUser.id);
-    if (existingIdx > -1) { allUsers[existingIdx] = editingUser; } else { allUsers.push(editingUser); }
-    db.saveUsers(allUsers);
-    refreshData();
-    setEditingUser(null);
+    try {
+      const token = getToken();
+      if (!token) {
+        alert('请先登录');
+        return;
+      }
+
+      const userData = {
+        username: editingUser.username,
+        phone_number: editingUser.phone_number,
+        enterprise_name: editingUser.enterpriseName,
+        approval_status: editingUser.approval_status,
+        is_certified: editingUser.is_certified
+      };
+
+      if (editingUser.id) {
+        // 更新现有用户
+        await api.updateUser(editingUser.id, userData, token);
+      } else {
+        // 注意：新用户创建应该通过注册流程，这里只做更新
+        alert('新用户请通过注册流程创建');
+        return;
+      }
+
+      refreshData();
+      setEditingUser(null);
+    } catch (error) {
+      console.error('保存用户失败:', error);
+      alert('保存用户失败，请重试');
+    }
   };
   
   // --- Poster Logic ---
@@ -303,21 +461,32 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
     }
   };
 
-  const handleSavePoster = (e: React.FormEvent) => {
+  const handleSavePoster = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPosterName.trim() || !newPosterImage) return;
-    
-    db.addCustomPoster({
-      id: Date.now().toString(),
-      name: newPosterName,
-      imageBase64: newPosterImage,
-      createdAt: Date.now()
-    });
-    
-    refreshData();
-    setNewPosterName('');
-    setNewPosterImage(null);
-    setShowPosterModal(false);
+
+    try {
+      const token = getToken();
+      if (!token) {
+        alert('请先登录');
+        return;
+      }
+
+      const posterData = {
+        name: newPosterName.trim(),
+        image_base64: newPosterImage
+      };
+
+      await api.createPoster(posterData, token);
+
+      refreshData();
+      setNewPosterName('');
+      setNewPosterImage(null);
+      setShowPosterModal(false);
+    } catch (error) {
+      console.error('保存海报失败:', error);
+      alert('保存海报失败，请重试');
+    }
   };
 
   // --- QR Code Logic ---
@@ -332,41 +501,65 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
     }
   };
 
-  const handleSaveQR = (e: React.FormEvent) => {
+  const handleSaveQR = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newQRName.trim() || !newQRImage) return;
-    
-    db.addContactQRCode({
-      id: Date.now().toString(),
-      name: newQRName,
-      imageBase64: newQRImage,
-      createdAt: Date.now()
-    });
-    
-    refreshData();
-    setNewQRName('');
-    setNewQRImage(null);
-    setShowQRModal(false);
+
+    try {
+      const token = getToken();
+      if (!token) {
+        alert('请先登录');
+        return;
+      }
+
+      const qrData = {
+        name: newQRName.trim(),
+        image_base64: newQRImage
+      };
+
+      await api.createContactQR(qrData, token);
+
+      refreshData();
+      setNewQRName('');
+      setNewQRImage(null);
+      setShowQRModal(false);
+    } catch (error) {
+      console.error('保存二维码失败:', error);
+      alert('保存二维码失败，请重试');
+    }
   };
 
-  const deleteItem = (type: 'doc'|'risk'|'evidence'|'law'|'user'|'poster'|'qr', id: string) => {
+  const deleteItem = async (type: 'doc'|'risk'|'evidence'|'law'|'user'|'poster'|'qr', id: string) => {
     if (!confirm('确定删除此项吗？')) return;
-    if (type === 'doc') {
-       db.saveDocs(docs.filter(d => d.id !== id));
-    } else if (type === 'risk') {
-       db.saveCheckScenarios(riskScenarios.filter(d => d.id !== id));
-    } else if (type === 'evidence') {
-       db.saveEvidenceList(evidenceList.filter(d => d.id !== id));
-    } else if (type === 'law') {
-       db.saveCivilCode(lawArticles.filter(d => d.id !== id));
-    } else if (type === 'user') {
-       db.deleteUser(id);
-    } else if (type === 'poster') {
-       db.deleteCustomPoster(id);
-    } else if (type === 'qr') {
-       db.deleteContactQRCode(id);
+
+    try {
+      const token = getToken();
+      if (!token) {
+        alert('请先登录');
+        return;
+      }
+
+      if (type === 'doc') {
+        await api.deleteDocument(id, token);
+      } else if (type === 'risk') {
+        await api.deleteRisk(id, token);
+      } else if (type === 'evidence') {
+        await api.deleteEvidence(id, token);
+      } else if (type === 'law') {
+        await api.deleteCivilCode(id, token);
+      } else if (type === 'user') {
+        await api.deleteUser(id, token);
+      } else if (type === 'poster') {
+        await api.deletePoster(id, token);
+      } else if (type === 'qr') {
+        await api.deleteContactQR(id, token);
+      }
+
+      refreshData();
+    } catch (error) {
+      console.error('删除失败:', error);
+      alert('删除失败，请重试');
     }
-    refreshData();
   };
 
   return (

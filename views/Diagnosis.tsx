@@ -1,8 +1,7 @@
 
 import React, { useState } from 'react';
-import { ChevronRight, FileText, Sparkles, ArrowLeft, Shield, AlertTriangle, HeadphonesIcon, Camera, MessageSquare, Copy } from 'lucide-react';
+import { ChevronRight, FileText, Sparkles, ArrowLeft, Shield, AlertTriangle, Camera, MessageSquare, Copy } from 'lucide-react';
 import { sendMessageToAI } from '../services/geminiService';
-import ConsultationModal from '../components/ConsultationModal';
 import { ViewState } from '../types';
 
 interface DiagnosisProps {
@@ -99,8 +98,7 @@ const Diagnosis: React.FC<DiagnosisProps> = ({ setCurrentView }) => {
   const [userInput, setUserInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiReport, setAiReport] = useState<string | null>(null);
-  const [showConsult, setShowConsult] = useState(false);
-
+  
   const handleAIDiagnosis = async () => {
     if (!userInput.trim()) return;
     setIsAnalyzing(true);
@@ -280,20 +278,8 @@ const Diagnosis: React.FC<DiagnosisProps> = ({ setCurrentView }) => {
           )}
         </div>
 
-        {!isAnalyzing && (
-          <div className="p-8 border-t border-gray-50 flex gap-3 bg-slate-50">
-            {/* Level 3: Human Funnel */}
-            <button 
-              onClick={() => setShowConsult(true)}
-              className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-               <HeadphonesIcon size={16} /> 案件复杂？一键咨询人工律师
-            </button>
-          </div>
-        )}
       </div>
 
-      <ConsultationModal isOpen={showConsult} onClose={() => setShowConsult(false)} />
     </div>
   );
 

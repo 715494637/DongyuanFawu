@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, BookOpen, Bookmark } from 'lucide-react';
-import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 import { LawArticle } from '../types';
 
 const CivilCodeSearch: React.FC = () => {
@@ -9,7 +9,16 @@ const CivilCodeSearch: React.FC = () => {
   const [articles, setArticles] = useState<LawArticle[]>([]);
 
   useEffect(() => {
-    setArticles(db.getCivilCode());
+    const loadData = async () => {
+      try {
+        const data = await api.getCivilCode();
+        setArticles(data);
+      } catch (error) {
+        console.error('Failed to load civil code articles:', error);
+      }
+    };
+
+    loadData();
   }, []);
   
   const filtered = articles.filter(a => 

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CheckCircle2, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react';
-import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 import { EvidenceGroup } from '../types';
 
 const EvidenceList: React.FC = () => {
@@ -9,7 +9,16 @@ const EvidenceList: React.FC = () => {
   const [evidenceData, setEvidenceData] = useState<EvidenceGroup[]>([]);
 
   useEffect(() => {
-    setEvidenceData(db.getEvidenceList());
+    const loadData = async () => {
+      try {
+        const data = await api.getEvidence();
+        setEvidenceData(data);
+      } catch (error) {
+        console.error('Failed to load evidence list:', error);
+      }
+    };
+
+    loadData();
   }, []);
 
   return (

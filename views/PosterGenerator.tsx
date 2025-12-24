@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Palette, Download, Share2, Check, AlertTriangle, FileText, ImageIcon, ShieldAlert, Zap, Heart, Star } from 'lucide-react';
-import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 import { CustomPosterTemplate } from '../types';
 
 interface PosterTemplate {
@@ -114,33 +114,54 @@ const PosterGenerator: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const posterRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    // 1. Load Logo
-    const savedLogo = db.getEnterpriseLogo();
-    if (savedLogo) setLogoUrl(savedLogo);
+  // 获取token的辅助函数
+  const getToken = () => {
+    return localStorage.getItem('token') || sessionStorage.getItem('token');
+  };
 
-    // 2. Load Custom Templates from DB
-    const custom = db.getCustomPosters();
-    if (custom && custom.length > 0) {
-      const customTpls: PosterTemplate[] = custom.map(c => ({
-        id: c.id,
-        name: c.name,
-        // 自定义模板使用图片作为背景
-        renderBg: () => (
-          <>
-            <img src={c.imageBase64} className="absolute inset-0 w-full h-full object-cover" alt="bg" />
-            <div className="absolute inset-0 bg-black/20"></div> {/* 增加遮罩确保文字可读 */}
-          </>
-        ),
-        icon: Star, // 自定义模板默认星标图标
-        defaultTitle: '物业通知',
-        themeColor: 'border-purple-500 bg-purple-50 text-purple-600',
-        textColorClass: 'text-white', // 默认白色文字
-        accentColorClass: 'bg-white/20 backdrop-blur-md', // 透明磨砂强调色
-        isCustom: true
-      }));
-      setAllTemplates([...customTpls, ...PRESET_TEMPLATES]);
-    }
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const token = getToken();
+
+        // 1. Load Logo from system config
+        if (token) {
+          const config = await api.getConfig();
+          if (config.enterprise_logo) {
+            setLogoUrl(config.enterprise_logo);
+          }
+        }
+
+        // 2. Load Custom Templates from API
+        const customPosters = await api.getPosters();
+        if (customPosters && customPosters.length > 0) {
+          const customTpls: PosterTemplate[] = customPosters.map(c => ({
+            id: c.id,
+            name: c.name,
+            // 自定义模板使用图片作为背景
+            renderBg: () => (
+              <>
+                <img src={c.image_base64} className="absolute inset-0 w-full h-full object-cover" alt="bg" />
+                <div className="absolute inset-0 bg-black/20"></div> {/* 增加遮罩确保文字可读 */}
+              </>
+            ),
+            icon: Star, // 自定义模板默认星标图标
+            defaultTitle: '物业通知',
+            themeColor: 'border-purple-500 bg-purple-50 text-purple-600',
+            textColorClass: 'text-white', // 默认白色文字
+            accentColorClass: 'bg-white/20 backdrop-blur-md', // 透明磨砂强调色
+            isCustom: true
+          }));
+          setAllTemplates([...customTpls, ...PRESET_TEMPLATES]);
+        }
+      } catch (error) {
+        console.error('加载数据失败:', error);
+        // 如果API加载失败，仍然显示预设模板
+        setAllTemplates(PRESET_TEMPLATES);
+      }
+    };
+
+    loadData();
   }, []);
 
   const handleTplSelect = (tpl: PosterTemplate) => {
@@ -148,26 +169,39 @@ const PosterGenerator: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     setTitle(tpl.defaultTitle);
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (ev) => {
+      reader.onload = async (ev) => {
         const base64 = ev.target?.result as string;
         setLogoUrl(base64);
-        db.saveEnterpriseLogo(base64);
+
+        // 保存到系统配置
+        try {
+          const token = getToken();
+          if (token) {
+            await api.updateConfig({ enterprise_logo: base64 }, token);
+          } else {
+            console.warn('未登录，无法保存企业Logo到服务器');
+            alert('请先登录后再上传企业Logo');
+          }
+        } catch (error) {
+          console.error('保存企业Logo失败:', error);
+          alert('保存企业Logo失败，请重试');
+        }
       };
       reader.readAsDataURL(file);
     }
   };
 
   const handleDownload = () => {
-    // Clarify instructions as web browser screenshot is the most reliable way without external heavy libs
-    alert('由于浏览器安全限制，请【长按上方海报区域】选择“添加到照片”或“发送给朋友”以保存高清原图。');
+    // 提示用户
+    alert('海报高清渲染完成，请长按上方预览图进行"保存到相册"或"发送给朋友"。');
   };
 
   return (
-    <div className="p-4 space-y-6 animate-fade-in pb-24">
+    <div className="p-5 space-y-6 animate-fade-in pb-24">
       
       {/* 风格选择器 */}
       <div className="space-y-3">
@@ -309,7 +343,7 @@ const PosterGenerator: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           onClick={handleDownload}
           className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-xs flex items-center justify-center gap-2 active:scale-95 transition-all shadow-xl"
         >
-          <Download size={16} /> 保存高清海报
+          <Download size={16} /> 保存高清海报到相册
         </button>
       </div>
 

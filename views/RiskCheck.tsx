@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, CheckSquare, AlertCircle, HardHat, FileText, ChevronRight } from 'lucide-react';
-import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 import { RiskScenario } from '../types';
 
 const RiskCheck: React.FC = () => {
@@ -11,7 +11,16 @@ const RiskCheck: React.FC = () => {
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   useEffect(() => {
-    setScenarios(db.getCheckScenarios());
+    const loadData = async () => {
+      try {
+        const data = await api.getRisks();
+        setScenarios(data);
+      } catch (error) {
+        console.error('Failed to load risk scenarios:', error);
+      }
+    };
+
+    loadData();
   }, []);
 
   const handleStart = (s: RiskScenario) => {

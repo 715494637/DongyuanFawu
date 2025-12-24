@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, Sparkles, ChevronRight, Copy, Check, Send, Bot, X } from 'lucide-react';
-import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 import { DocumentItem } from '../types';
 import { sendMessageToAI } from '../services/geminiService';
 
@@ -18,8 +18,20 @@ const Documents: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
-    setDocs(db.getDocs());
-    setCategories(db.getCategories());
+    const loadData = async () => {
+      try {
+        const docsData = await api.getDocuments();
+        setDocs(docsData);
+
+        // 从文档中提取分类
+        const cats = ['全部', ...new Set(docsData.map(doc => doc.category))];
+        setCategories(cats);
+      } catch (error) {
+        console.error('Failed to load documents:', error);
+      }
+    };
+
+    loadData();
   }, []);
 
   const filteredDocs = activeCat === "全部" 

@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ViewState, User, UserRole } from './types';
-import { db } from './services/dbService';
 import Layout from './components/Layout';
 import Home from './views/Home';
 import Calculator from './views/Calculator';
@@ -27,24 +26,29 @@ const App: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // 1. 初始化数据库
-    db.init();
-    
-    // 2. 检查会话持久化 (Auto Login)
-    const sessionId = db.getSession();
+    // 1. 检查会话持久化 (Auto Login)
+    const sessionId = localStorage.getItem('dy_session_user') || sessionStorage.getItem('dy_session_user');
     if (sessionId) {
-      const savedUser = db.getUserById(sessionId);
-      if (savedUser) {
-        setUser(savedUser);
-        if (savedUser.role === UserRole.ADMIN) {
-          setCurrentView(ViewState.ADMIN_DASHBOARD);
-        } else {
-          setCurrentView(ViewState.HOME);
+      // 从localStorage获取保存的用户信息
+      const savedUserStr = localStorage.getItem('dy_saved_user');
+      if (savedUserStr) {
+        try {
+          const savedUser = JSON.parse(savedUserStr);
+          if (savedUser.id === sessionId) {
+            setUser(savedUser);
+            if (savedUser.role === UserRole.ADMIN) {
+              setCurrentView(ViewState.ADMIN_DASHBOARD);
+            } else {
+              setCurrentView(ViewState.HOME);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to parse saved user:', error);
         }
       }
     }
 
-    // 3. 设置开屏页显示时间 (2.5秒)
+    // 2. 设置开屏页显示时间 (2.5秒)
     const timer = setTimeout(() => {
       setShowSplash(false);
     }, 2500);
@@ -61,7 +65,18 @@ const App: React.FC = () => {
 
   const handleLogin = (loggedInUser: User, remember: boolean) => {
     setUser(loggedInUser);
-    db.setSession(loggedInUser.id, remember); // 根据用户选择保存会话
+
+    // 保存会话信息
+    if (remember) {
+      localStorage.setItem('dy_session_user', loggedInUser.id);
+      localStorage.setItem('dy_saved_user', JSON.stringify(loggedInUser));
+      sessionStorage.removeItem('dy_session_user');
+    } else {
+      sessionStorage.setItem('dy_session_user', loggedInUser.id);
+      sessionStorage.setItem('dy_saved_user', JSON.stringify(loggedInUser));
+      localStorage.removeItem('dy_session_user');
+    }
+
     if (loggedInUser.role === UserRole.ADMIN) {
       setCurrentView(ViewState.ADMIN_DASHBOARD);
     } else {
@@ -71,7 +86,11 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     setUser(null);
-    db.clearSession(); // 清除会话
+    // 清除会话
+    localStorage.removeItem('dy_session_user');
+    localStorage.removeItem('dy_saved_user');
+    sessionStorage.removeItem('dy_session_user');
+    sessionStorage.removeItem('dy_saved_user');
     setCurrentView(ViewState.HOME);
   };
 

@@ -57,6 +57,19 @@ export const api = {
     return res.json();
   },
 
+  // 更新用户信息
+  async updateUser(userId: string, userData: any, token: string) {
+    const res = await fetch(`${API_BASE}/users/${userId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(userData)
+    });
+    return res.json();
+  },
+
   // 获取文档列表
   async getDocuments() {
     const res = await fetch(`${API_BASE}/documents`);
@@ -318,6 +331,34 @@ export const api = {
   // 删除联系二维码
   async deleteContactQR(qrId: string, token: string) {
     const res = await fetch(`${API_BASE}/contact-qr/${qrId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return res.json();
+  },
+
+  // 获取开屏图
+  async getSplashImage() {
+    const res = await fetch(`${API_BASE}/splash-image`);
+    return res.json();
+  },
+
+  // 上传开屏图
+  async uploadSplashImage(imageData: { splash_image: string }, token: string) {
+    const res = await fetch(`${API_BASE}/splash-image`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(imageData)
+    });
+    return res.json();
+  },
+
+  // 删除开屏图
+  async deleteSplashImage(token: string) {
+    const res = await fetch(`${API_BASE}/splash-image`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
     });

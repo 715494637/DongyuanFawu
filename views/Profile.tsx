@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { Camera, Edit2, Check, X, LogOut, ShieldCheck, User as UserIcon } from 'lucide-react';
 import { User } from '../types';
-import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 
 interface ProfileProps {
   user: User;
@@ -15,28 +15,56 @@ const Profile: React.FC<ProfileProps> = ({ user, setUser, onLogout }) => {
   const [tempName, setTempName] = useState(user.username);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUpdateName = () => {
+  const handleUpdateName = async () => {
     if (!tempName.trim()) return;
-    const updated = db.updateUser(user.id, { username: tempName });
-    if (updated) {
-      setUser(updated);
-      setIsEditingName(false);
+
+    try {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (!token) {
+        alert('请先登录');
+        return;
+      }
+
+      const updated = await api.updateUser(user.id, { username: tempName }, token);
+      if (updated) {
+        setUser(updated);
+        setIsEditingName(false);
+      }
+    } catch (error) {
+      console.error('更新用户名失败:', error);
+      alert('更新用户名失败，请重试');
     }
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      const updated = db.updateUser(user.id, { avatarUrl: base64 });
-      if (updated) {
-        setUser(updated);
+    try {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (!token) {
+        alert('请先登录');
+        return;
       }
-    };
-    reader.readAsDataURL(file);
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        try {
+          const updated = await api.updateUser(user.id, { avatar_url: base64 }, token);
+          if (updated) {
+            setUser(updated);
+          }
+        } catch (error) {
+          console.error('更新头像失败:', error);
+          alert('更新头像失败，请重试');
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('头像处理失败:', error);
+      alert('头像处理失败，请重试');
+    }
   };
 
   return (
