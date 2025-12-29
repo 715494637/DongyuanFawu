@@ -70,6 +70,19 @@ export const api = {
     return res.json();
   },
 
+  // 管理员创建用户
+  async createUserByAdmin(userData: any, token: string) {
+    const res = await fetch(`${API_BASE}/users`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(userData)
+    });
+    return res.json();
+  },
+
   // 获取文档列表
   async getDocuments() {
     const res = await fetch(`${API_BASE}/documents`);

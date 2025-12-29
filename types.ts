@@ -46,12 +46,11 @@ export interface DocumentItem {
 }
 
 export interface RiskScenario {
-  id: string;
-  label?: string; 
-  risk?: 'High' | 'Medium' | 'Low'; 
-  content?: string; 
-  title?: string; 
-  questions?: string[]; 
+  id?: string;
+  title?: string;
+  risk_level?: 'High' | 'Medium' | 'Low' | string;
+  content?: string;
+  questions?: string[];
 }
 
 export interface EvidenceGroup {

@@ -28,7 +28,10 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
   const [customPosters, setCustomPosters] = useState<CustomPosterTemplate[]>([]);
   const [contactQRs, setContactQRs] = useState<ContactQRCode[]>([]);
   const [systemConfig, setSystemConfig] = useState<SystemConfig>({ enablePhoneLogin: true, welcomeMessage: '' });
-  
+
+  // 临时配置状态（用于编辑，未保存）
+  const [tempConfig, setTempConfig] = useState<SystemConfig>({ enablePhoneLogin: true, welcomeMessage: '' });
+
   // Config States
   const [splashImage, setSplashImage] = useState<string | null>(null);
   const splashInputRef = useRef<HTMLInputElement>(null);
@@ -95,6 +98,10 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         enable_phone_login: configData.enable_phone_login,
         welcome_message: configData.welcome_message
       });
+      setTempConfig({
+        enablePhoneLogin: configData.enable_phone_login,
+        welcomeMessage: configData.welcome_message
+      });
       setKbText(configData.ai_knowledge_base || '');
 
       // 设置开屏图
@@ -130,14 +137,27 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
     }
   };
 
-  const handleConfigChange = async (newConfig: Partial<SystemConfig>) => {
+  const handleConfigChange = (newConfig: Partial<SystemConfig>) => {
+    // 只更新临时状态，不发送请求
+    setTempConfig(prev => ({ ...prev, ...newConfig }));
+  };
+
+  // 保存系统配置
+  const saveSystemConfig = async () => {
     try {
       const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const updated = { ...systemConfig, ...newConfig };
-      await api.updateConfig(updated, token!);
-      setSystemConfig(updated);
+      const payload = {
+        enable_phone_login: tempConfig.enablePhoneLogin,
+        welcome_message: tempConfig.welcomeMessage
+      };
+      await api.updateConfig(payload, token!);
+      setSystemConfig({
+        enable_phone_login: tempConfig.enablePhoneLogin,
+        welcome_message: tempConfig.welcomeMessage
+      });
+      alert('系统配置保存成功！');
     } catch (error) {
-      alert('配置更新失败，请重试');
+      alert('配置保存失败，请重试');
     }
   };
 
@@ -426,8 +446,10 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
 
       const userData = {
         username: editingUser.username,
+        password: editingUser.password,
         phone_number: editingUser.phone_number,
         enterprise_name: editingUser.enterpriseName,
+        role: editingUser.role,
         approval_status: editingUser.approval_status,
         is_certified: editingUser.is_certified
       };
@@ -436,16 +458,16 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         // 更新现有用户
         await api.updateUser(editingUser.id, userData, token);
       } else {
-        // 注意：新用户创建应该通过注册流程，这里只做更新
-        alert('新用户请通过注册流程创建');
-        return;
+        // 创建新用户（管理员直接创建）
+        await api.createUserByAdmin(userData, token);
       }
 
       refreshData();
       setEditingUser(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('保存用户失败:', error);
-      alert('保存用户失败，请重试');
+      const errorMsg = error.detail || error.message || '保存用户失败，请重试';
+      alert(errorMsg);
     }
   };
   
@@ -619,22 +641,30 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
           <div className="max-w-4xl mx-auto space-y-8">
              {/* 登录设置 */}
              <div className="bg-[#12151c] border border-slate-800 rounded-[2.5rem] p-10">
-                <h3 className="text-xl font-black text-white mb-6 flex items-center gap-3">
-                   <Settings className="text-orange-500" /> 功能模块开关
-                </h3>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-black text-white flex items-center gap-3">
+                     <Settings className="text-orange-500" /> 功能模块开关
+                  </h3>
+                  <button
+                    onClick={saveSystemConfig}
+                    className="bg-orange-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-orange-600 transition-colors"
+                  >
+                    <Save size={14} /> 保存配置
+                  </button>
+                </div>
                 <div className="bg-white/5 p-6 rounded-2xl flex items-center justify-between">
                    <div className="flex items-center gap-4">
                       <div className="bg-blue-500/20 p-3 rounded-xl text-blue-400"><Smartphone size={24} /></div>
                       <div>
                          <div className="font-bold text-white">手机验证码登录</div>
-                         <div className="text-xs text-slate-500 mt-1">开启后，登录页将显示“验证并登录”选项。</div>
+                         <div className="text-xs text-slate-500 mt-1">开启后，登录页将显示"验证并登录"选项。</div>
                       </div>
                    </div>
-                   <button 
-                     onClick={() => handleConfigChange({ enablePhoneLogin: !systemConfig.enablePhoneLogin })}
-                     className={`w-14 h-8 rounded-full p-1 transition-colors ${systemConfig.enablePhoneLogin ? 'bg-orange-500' : 'bg-slate-700'}`}
+                   <button
+                     onClick={() => handleConfigChange({ enablePhoneLogin: !tempConfig.enablePhoneLogin })}
+                     className={`w-14 h-8 rounded-full p-1 transition-colors ${tempConfig.enablePhoneLogin ? 'bg-orange-500' : 'bg-slate-700'}`}
                    >
-                      <div className={`w-6 h-6 bg-white rounded-full transition-transform ${systemConfig.enablePhoneLogin ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                      <div className={`w-6 h-6 bg-white rounded-full transition-transform ${tempConfig.enablePhoneLogin ? 'translate-x-6' : 'translate-x-0'}`}></div>
                    </button>
                 </div>
 
@@ -643,14 +673,17 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
                   <h4 className="font-bold text-white mb-4 flex items-center gap-2">
                      <MessageSquare size={18} className="text-blue-400" /> AI 助手默认欢迎语
                   </h4>
-                  <textarea 
-                    value={systemConfig.welcomeMessage}
+                  <textarea
+                    value={tempConfig.welcomeMessage}
                     onChange={(e) => handleConfigChange({ welcomeMessage: e.target.value })}
                     className="w-full bg-white/5 border border-slate-700 rounded-2xl p-6 text-slate-300 text-sm leading-relaxed outline-none focus:border-orange-500/50 h-32 resize-none"
                     placeholder="配置用户进入 AI 咨询页面时看到的默认欢迎语..."
                   />
-                  <div className="text-[10px] text-slate-500 mt-2">
-                     修改后，用户下次进入“AI 法务助手”时生效。
+                  <div className="text-[10px] text-slate-500 mt-2 flex items-center gap-2">
+                     <span>修改后点击上方"保存配置"按钮生效。</span>
+                     {tempConfig.welcomeMessage !== systemConfig.welcomeMessage && (
+                       <span className="text-orange-400 font-bold">● 有未保存的更改</span>
+                     )}
                   </div>
                 </div>
              </div>
@@ -792,7 +825,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
                  </tbody>
                </table>
             </div>
-            <button onClick={() => setEditingUser({ id: Date.now().toString(), username: '', password: '123', role: UserRole.USER, isCertified: true, approvalStatus: 'APPROVED', enterpriseName: '' })} className="bg-orange-500 text-white px-6 py-3 rounded-xl text-xs font-bold w-full">新增员工账号</button>
+            <button onClick={() => setEditingUser({ username: '', password: '123', role: UserRole.USER, isCertified: true, approvalStatus: 'APPROVED', enterpriseName: '' })} className="bg-orange-500 text-white px-6 py-3 rounded-xl text-xs font-bold w-full">新增员工账号</button>
           </div>
         )}
 
@@ -839,10 +872,10 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
             <div className="flex gap-2">
               <button 
                 onClick={() => {
-                   if (activeTab === 'docs') setEditingDoc({ id: Date.now().toString(), title: '', category: categories[1] || '全部', description: '', content: '' });
-                   if (activeTab === 'risk') setEditingRisk({ id: Date.now().toString(), title: '新风险场景', questions: [] });
-                   if (activeTab === 'evidence') setEditingEvidence({ id: Date.now().toString(), title: '新取证分类', items: [] });
-                   if (activeTab === 'laws') setEditingLaw({ id: Date.now().toString(), title: '', content: '' });
+                   if (activeTab === 'docs') setEditingDoc({ title: '', category: categories[1] || '全部', description: '', content: '' });
+                   if (activeTab === 'risk') setEditingRisk({ title: '新风险场景', risk_level: 'Medium', content: '', questions: [] });
+                   if (activeTab === 'evidence') setEditingEvidence({ title: '新取证分类', items: [] });
+                   if (activeTab === 'laws') setEditingLaw({ title: '', content: '' });
                 }}
                 className="bg-orange-500 text-white px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-orange-600 transition-colors"
               >
