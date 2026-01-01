@@ -123,12 +123,12 @@ const Profile: React.FC<ProfileProps> = ({ user, setUser, onLogout }) => {
           <div className="mt-2 flex items-center gap-2 px-4 py-1.5 bg-orange-50 rounded-full">
             <ShieldCheck size={14} className="text-orange-500" />
             <span className="text-xs font-bold text-orange-600 uppercase tracking-widest">
-              {user.enterpriseName || '个人账户'}
+              {user.enterprise_name || '个人账户'}
             </span>
           </div>
 
-          <div className={`mt-4 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${user.isCertified ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-            {user.isCertified ? '已通过企业实名认证' : '待完善企业资质'}
+          <div className={`mt-4 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${user.is_certified ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+            {user.is_certified ? '已通过企业实名认证' : '待完善企业资质'}
           </div>
         </div>
 

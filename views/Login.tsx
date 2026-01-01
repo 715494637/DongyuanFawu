@@ -102,8 +102,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   const checkApprovalStatus = (user: UserType): boolean => {
     if (user.role === UserRole.ADMIN) return true;
-    
-    const status = user.approvalStatus || 'APPROVED';
+
+    const status = user.approval_status || 'APPROVED';
     if (status === 'PENDING') {
       setError('账号正在审核中，请联系管理员审批');
       return false;
@@ -209,7 +209,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       const response = await api.register({
         username: regUsername.trim(),
         password: regPassword.trim(),
-        phoneNumber: regPhone.trim(),
+        phone_number: regPhone.trim(),
         enterprise_name: regEnterprise
       });
 

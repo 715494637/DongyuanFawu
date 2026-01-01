@@ -432,7 +432,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
     e.preventDefault();
     if (!editingUser) return;
 
-    if (editingUser.role === UserRole.USER && !editingUser.enterpriseName) {
+    if (editingUser.role === UserRole.USER && !editingUser.enterprise_name) {
       alert('请选择该员工所属的物业公司');
       return;
     }
@@ -448,7 +448,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         username: editingUser.username,
         password: editingUser.password,
         phone_number: editingUser.phone_number,
-        enterprise_name: editingUser.enterpriseName,
+        enterprise_name: editingUser.enterprise_name,
         role: editingUser.role,
         approval_status: editingUser.approval_status,
         is_certified: editingUser.is_certified
@@ -752,17 +752,17 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
           <div className="space-y-8">
              
              {/* 待审核列表 */}
-             {users.some(u => u.approvalStatus === 'PENDING') && (
+             {users.some(u => u.approval_status === 'PENDING') && (
                <div className="bg-orange-500/10 border border-orange-500/30 rounded-3xl p-6">
                  <h4 className="font-bold text-orange-500 flex items-center gap-2 mb-4"><UserCheck size={18} /> 待审核注册申请</h4>
                  <div className="space-y-3">
-                    {users.filter(u => u.approvalStatus === 'PENDING').map(u => (
+                    {users.filter(u => u.approval_status === 'PENDING').map(u => (
                       <div key={u.id} className="bg-[#12151c] rounded-2xl p-4 flex items-center justify-between border border-slate-800">
                          <div className="flex items-center gap-4">
                             <div className="bg-slate-800 p-2 rounded-lg text-slate-400"><UserPlus size={20} /></div>
                             <div>
-                               <div className="text-white font-bold">{u.username} <span className="text-slate-500 font-normal text-xs ml-2">{u.phoneNumber}</span></div>
-                               <div className="text-xs text-orange-400 mt-1">申请加入：{u.enterpriseName}</div>
+                               <div className="text-white font-bold">{u.username} <span className="text-slate-500 font-normal text-xs ml-2">{u.phone_number}</span></div>
+                               <div className="text-xs text-orange-400 mt-1">申请加入：{u.enterprise_name}</div>
                             </div>
                          </div>
                          <div className="flex gap-2">
@@ -789,7 +789,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-slate-800">
-                   {users.filter(u => u.approvalStatus !== 'PENDING').map(u => (
+                   {users.filter(u => u.approval_status !== 'PENDING').map(u => (
                      <tr key={u.id} className="hover:bg-white/5 transition-colors group">
                        <td className="p-6 font-bold text-white text-sm">
                           <div className="flex items-center gap-3">
@@ -798,17 +798,17 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
                              </div>
                              <div>
                                 <div>{u.username}</div>
-                                <div className="text-xs text-slate-500 font-normal">{u.phoneNumber || '无手机号'}</div>
+                                <div className="text-xs text-slate-500 font-normal">{u.phone_number || '无手机号'}</div>
                              </div>
                           </div>
                        </td>
                        <td className="p-6 text-xs text-slate-400">
                           <span className={`px-2 py-1 rounded-md ${u.role === UserRole.ADMIN ? 'bg-purple-900/30 text-purple-400' : 'bg-slate-800 text-slate-300'}`}>
-                             {u.role === UserRole.ADMIN ? '系统全局' : (u.enterpriseName || '未分配')}
+                             {u.role === UserRole.ADMIN ? '系统全局' : (u.enterprise_name || '未分配')}
                           </span>
                        </td>
                        <td className="p-6 text-xs">
-                          {u.approvalStatus === 'REJECTED' ? (
+                          {u.approval_status === 'REJECTED' ? (
                             <span className="text-red-500 flex items-center gap-1"><XCircle size={12}/> 已拒绝</span>
                           ) : (
                             <span className="text-green-500 flex items-center gap-1"><Check size={12}/> 正常</span>
@@ -825,7 +825,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
                  </tbody>
                </table>
             </div>
-            <button onClick={() => setEditingUser({ username: '', password: '123', role: UserRole.USER, isCertified: true, approvalStatus: 'APPROVED', enterpriseName: '' })} className="bg-orange-500 text-white px-6 py-3 rounded-xl text-xs font-bold w-full">新增员工账号</button>
+            <button onClick={() => setEditingUser({ username: '', password: '123', role: UserRole.USER, is_certified: true, approval_status: 'APPROVED', enterprise_name: '' })} className="bg-orange-500 text-white px-6 py-3 rounded-xl text-xs font-bold w-full">新增员工账号</button>
           </div>
         )}
 
@@ -853,7 +853,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
                        <div>
                           <div className="font-bold text-white">{ent}</div>
                           <div className="text-[10px] text-slate-500 mt-1">
-                             现有员工: {users.filter(u => u.enterpriseName === ent).length} 人
+                             现有员工: {users.filter(u => u.enterprise_name === ent).length} 人
                           </div>
                        </div>
                     </div>
@@ -1225,20 +1225,58 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
              </div>
              <div className="flex-1 overflow-y-auto p-10 space-y-6">
                 <div className="grid grid-cols-2 gap-6">
-                   <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">标题</label>
-                      <input value={editingDoc.title} onChange={e => setEditingDoc({...editingDoc, title: e.target.value})} className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white" required />
-                   </div>
-                   <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">分类</label>
-                      <select value={editingDoc.category} onChange={e => setEditingDoc({...editingDoc, category: e.target.value})} className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white">
-                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                   </div>
+                  <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-slate-500 uppercase">标题</label>
+                     <input
+                       value={editingDoc.title}
+                       onChange={e => setEditingDoc({...editingDoc, title: e.target.value})}
+                       className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500/50 outline-none transition-colors"
+                       placeholder="请输入文书标题"
+                       required
+                     />
+                  </div>
+                  <div className="space-y-2">
+                     <label className="text-[10px] font-bold text-slate-500 uppercase">分类</label>
+                     <select
+                       value={editingDoc.category}
+                       onChange={e => setEditingDoc({...editingDoc, category: e.target.value})}
+                       className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500/50 outline-none transition-colors"
+                     >
+                       {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                     </select>
+                  </div>
                 </div>
-                <textarea value={editingDoc.content} onChange={e => setEditingDoc({...editingDoc, content: e.target.value})} className="flex-1 bg-black/40 border border-slate-800 rounded-2xl p-6 text-sm text-slate-300 font-mono h-80 outline-none" required />
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">描述</label>
+                  <textarea
+                    value={editingDoc.description}
+                    onChange={e => setEditingDoc({...editingDoc, description: e.target.value})}
+                    className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-300 focus:border-orange-500/50 outline-none transition-colors resize-none"
+                    placeholder="请输入文书简要描述，用于列表展示（建议50-100字）"
+                    rows={3}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">模版内容</label>
+                  <textarea
+                    value={editingDoc.content}
+                    onChange={e => setEditingDoc({...editingDoc, content: e.target.value})}
+                    className="w-full bg-black/40 border border-slate-800 rounded-2xl p-6 text-sm text-slate-300 font-mono h-80 outline-none focus:border-orange-500/50 transition-colors resize-none"
+                    placeholder="请输入文书模版内容，支持使用 {变量名} 格式的占位符"
+                    required
+                  />
+                </div>
              </div>
-             <div className="p-8 border-t border-slate-800 flex justify-end"><button type="submit" className="bg-orange-500 text-white px-10 py-3 rounded-2xl font-black text-sm">保存文书数据</button></div>
+             <div className="p-8 border-t border-slate-800 flex justify-end">
+               <button
+                 type="submit"
+                 className="bg-orange-500 hover:bg-orange-600 text-white px-10 py-3 rounded-2xl font-black text-sm transition-colors"
+               >
+                 保存文书数据
+               </button>
+             </div>
           </form>
         </div>
       )}
@@ -1255,7 +1293,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
                 </div>
                 <div className="space-y-2">
                    <label className="text-xs text-slate-500 font-bold">手机号码 (登录/验证用)</label>
-                   <input value={editingUser.phoneNumber || ''} onChange={e => setEditingUser({...editingUser, phoneNumber: e.target.value})} className="w-full bg-black/40 border border-slate-800 rounded-xl py-4 px-4 text-sm text-white" placeholder="11位手机号" />
+                   <input value={editingUser.phone_number || ''} onChange={e => setEditingUser({...editingUser, phone_number: e.target.value})} className="w-full bg-black/40 border border-slate-800 rounded-xl py-4 px-4 text-sm text-white" placeholder="11位手机号" />
                 </div>
                 <div className="space-y-2">
                    <label className="text-xs text-slate-500 font-bold">登录密码</label>
@@ -1275,9 +1313,9 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
                 {editingUser.role === UserRole.USER && (
                   <div className="space-y-2">
                      <label className="text-xs text-slate-500 font-bold">所属物业公司</label>
-                     <select 
-                       value={editingUser.enterpriseName || ''} 
-                       onChange={e => setEditingUser({...editingUser, enterpriseName: e.target.value})} 
+                     <select
+                       value={editingUser.enterprise_name || ''}
+                       onChange={e => setEditingUser({...editingUser, enterprise_name: e.target.value})}
                        className="w-full bg-black/40 border border-slate-800 rounded-xl py-4 px-4 text-sm text-white focus:border-orange-500/50 outline-none"
                        required
                      >
@@ -1287,7 +1325,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
                         ))}
                      </select>
                      <div className="text-[10px] text-slate-600">
-                        提示：若找不到公司，请先在“物业公司管理”中创建。
+                        提示：若找不到公司，请先在"物业公司管理"中创建。
                      </div>
                   </div>
                 )}

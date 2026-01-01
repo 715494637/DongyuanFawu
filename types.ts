@@ -28,12 +28,19 @@ export interface User {
   id: string;
   username: string;
   password?: string;
-  phoneNumber?: string; // 新增：手机号
+  phone_number?: string; // 手机号（与后端字段名一致）
   role: UserRole;
+  enterprise_name?: string; // 物业公司名称（与后端字段名一致）
+  is_certified: boolean; // 认证状态（与后端字段名一致）
+  avatar_url?: string; // 头像URL（与后端字段名一致）
+  approval_status?: ApprovalStatus; // 审批状态（与后端字段名一致）
+
+  // 前端兼容性属性（可选，用于向后兼容旧代码）
+  phoneNumber?: string;
   enterpriseName?: string;
-  isCertified: boolean;
+  isCertified?: boolean;
   avatarUrl?: string;
-  approvalStatus?: ApprovalStatus; // 新增：审批状态
+  approvalStatus?: ApprovalStatus;
 }
 
 export interface DocumentItem {

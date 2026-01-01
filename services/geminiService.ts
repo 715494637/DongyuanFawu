@@ -45,7 +45,12 @@ const getSystemInstruction = async () => {
 };
 
 export const sendMessageToAI = async (message: string, useSearch: boolean = false, isComplex: boolean = false): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({
+    httpOptions: {
+      baseUrl: import.meta.env.VITE_GEMINI_BASE_URL || '',
+    },
+    apiKey: import.meta.env.VITE_GEMINI_API_KEY || '',
+  });
   // 复杂诊断使用 Pro 模型，日常对话使用 Flash 模型
   const modelName = isComplex ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
   
@@ -66,30 +71,8 @@ export const sendMessageToAI = async (message: string, useSearch: boolean = fals
   }
 };
 
-export const generateImage = async (prompt: string): Promise<string | null> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [{ text: `物业管理海报需求：${prompt}。风格要求：商务、严肃、现代。如果是宣传类则温馨大气。` }],
-      },
-    });
-    
-    for (const part of response.candidates?.[0]?.content.parts || []) {
-      if (part.inlineData) {
-        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-      }
-    }
-    return null;
-  } catch (error) {
-    console.error("Image Generation Error:", error);
-    return null;
-  }
-};
-
 export const textToSpeech = async (text: string): Promise<Uint8Array | null> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || '' });
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
