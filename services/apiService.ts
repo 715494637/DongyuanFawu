@@ -301,7 +301,7 @@ export const api = {
   },
 
   // 创建自定义海报
-  async createPoster(posterData: any, token: string) {
+  async createPoster(posterData: { name: string; image_url: string }, token: string) {
     const res = await fetch(`${API_BASE}/posters`, {
       method: 'POST',
       headers: {
@@ -329,7 +329,7 @@ export const api = {
   },
 
   // 创建联系二维码
-  async createContactQR(qrData: any, token: string) {
+  async createContactQR(qrData: { name: string; image_url: string }, token: string) {
     const res = await fetch(`${API_BASE}/contact-qr`, {
       method: 'POST',
       headers: {

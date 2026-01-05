@@ -1,12 +1,61 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
 import {
   LayoutDashboard, Users, BookOpen, BrainCircuit,
   Plus, Trash2, ShieldCheck, UserPlus,
   Edit3, X, ListFilter, Camera, Scale, Save, Image as ImageIcon, Upload, Headphones, Settings, MonitorPlay, Building, Smartphone, Check, UserCheck, XCircle, MessageSquare
 } from 'lucide-react';
 import { api } from '../services/apiService';
+import { imageUploadService } from '../services/imageUploadService';
 import { DocumentItem, RiskScenario, User, UserRole, EvidenceGroup, LawArticle, CustomPosterTemplate, ContactQRCode, SystemConfig } from '../types';
+
+// Memoized 子组件优化渲染性能
+const LoadingIndicator = memo(() => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+    <div className="bg-[#12151c] p-8 rounded-3xl border border-slate-800 flex flex-col items-center gap-4 shadow-2xl">
+      <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent"></div>
+      <div className="text-white font-bold">加载管理数据中...</div>
+      <div className="text-xs text-slate-500">请稍候，正在获取系统配置</div>
+    </div>
+  </div>
+));
+
+const Sidebar = memo(({ activeTab, onLogout }: { activeTab: string; onLogout: () => void }) => {
+  const menuItems = [
+    { id: 'kb', icon: BrainCircuit, label: 'AI 知识引擎', desc: '训练语料与提示词配置' },
+    { id: 'config', icon: Settings, label: '系统外观配置', desc: '开屏、登录与全局设置' },
+    { id: 'users', icon: Users, label: '员工账号体系', desc: '审批注册与权限管理' },
+    { id: 'companies', icon: Building, label: '物业公司管理', desc: '企业主体与组织架构' },
+    { id: 'docs', icon: BookOpen, label: '文书模版中心', desc: '合同/函件内容维护' },
+    { id: 'risk', icon: LayoutDashboard, label: '合规自查表', desc: '风险场景与检查项' },
+    { id: 'evidence', icon: Camera, label: '取证清单配置', desc: '标准证据闭环维护' },
+    { id: 'laws', icon: Scale, label: '民法典数据库', desc: '法律条文更新' },
+    { id: 'posters', icon: ImageIcon, label: '海报模板配置', desc: '上传自定义背景图' },
+    { id: 'contact', icon: Headphones, label: '咨询通道配置', desc: '企业微信二维码管理' },
+  ];
+
+  return (
+    <div className="w-80 bg-[#12151c] border-r border-slate-800 flex flex-col shadow-2xl">
+      <div className="p-8 border-b border-slate-800 flex items-center gap-3">
+        <div className="bg-orange-500 p-2 rounded-xl"><ShieldCheck className="text-white" size={24} /></div>
+        <div><h1 className="text-lg font-black text-white">东元后台</h1><p className="text-[8px] text-orange-500 uppercase font-bold tracking-widest">Legal OS v4.1</p></div>
+      </div>
+
+      <nav className="flex-1 p-6 space-y-2">
+        {menuItems.map(item => (
+          <button key={item.id} onClick={() => {/* setActiveTab will be handled by parent */}} className={`w-full text-left p-4 rounded-2xl border transition-all ${activeTab === item.id ? 'bg-orange-500/10 border-orange-500/40 text-white' : 'border-transparent hover:bg-white/5 text-slate-500'}`}>
+            <div className="flex items-center gap-4">
+              <item.icon size={20} className={activeTab === item.id ? 'text-orange-400' : ''} />
+              <div><div className="font-bold text-sm">{item.label}</div><div className="text-[9px] opacity-40">{item.desc}</div></div>
+            </div>
+          </button>
+        ))}
+      </nav>
+
+      <div className="p-6"><button onClick={onLogout} className="w-full py-4 bg-red-500/10 text-red-500 rounded-2xl font-bold text-xs">退出后台管理</button></div>
+    </div>
+  );
+});
 
 const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState<'kb' | 'docs' | 'risk' | 'evidence' | 'laws' | 'users' | 'companies' | 'posters' | 'contact' | 'config'>('kb');
@@ -35,6 +84,9 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
   // Config States
   const [splashImage, setSplashImage] = useState<string | null>(null);
   const splashInputRef = useRef<HTMLInputElement>(null);
+
+  // Loading state
+  const [isLoading, setIsLoading] = useState(true);
   
   // Modals / Editing States
   const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
@@ -67,7 +119,19 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
     refreshData();
   }, []);
 
+  // 使用 useMemo 优化计算
+  const memoizedData = useMemo(() => ({
+    pendingUsers: users.filter(u => u.approval_status === 'PENDING'),
+    approvedUsers: users.filter(u => u.approval_status !== 'PENDING'),
+    docCategories: categories,
+    enterprisesWithUserCount: enterprises.map(ent => ({
+      name: ent,
+      userCount: users.filter(u => u.enterprise_name === ent).length
+    }))
+  }), [users, categories, enterprises]);
+
   const refreshData = async () => {
+    setIsLoading(true);
     try {
       const token = localStorage.getItem('token') || sessionStorage.getItem('token');
 
@@ -94,36 +158,44 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         api.getContactQR()
       ]);
 
-      setSystemConfig({
-        enable_phone_login: configData.enable_phone_login,
-        welcome_message: configData.welcome_message
-      });
-      setTempConfig({
-        enablePhoneLogin: configData.enable_phone_login,
-        welcomeMessage: configData.welcome_message
-      });
-      setKbText(configData.ai_knowledge_base || '');
+      // 使用 requestAnimationFrame 批量更新状态，避免阻塞渲染
+      requestAnimationFrame(() => {
+        // 批量更新配置相关状态
+        const configUpdates = {
+          enable_phone_login: configData.enable_phone_login,
+          welcome_message: configData.welcome_message
+        };
 
-      // 设置开屏图
-      if (configData.splash_image) {
-        setSplashImage(configData.splash_image);
-      }
-      setDocs(docsData);
-      setRiskScenarios(risksData);
-      setEvidenceList(evidenceData);
-      setLawArticles(lawsData);
-      setUsers(usersData);
-      setEnterprises(enterprisesData);
-      setCustomPosters(postersData);
-      setContactQRs(qrData);
+        setSystemConfig(configUpdates);
+        setTempConfig({
+          enablePhoneLogin: configData.enable_phone_login,
+          welcomeMessage: configData.welcome_message
+        });
+        setKbText(configData.ai_knowledge_base || '');
+        setSplashImage(configData.splash_image || null);
 
-      // 从文档中提取分类
-      const uniqueCategories = Array.from(new Set(docsData.map((doc: any) => doc.category)));
-      setCategories(['全部', ...uniqueCategories]);
+        // 批量更新列表数据
+        setDocs(docsData);
+        setRiskScenarios(risksData);
+        setEvidenceList(evidenceData);
+        setLawArticles(lawsData);
+        setUsers(usersData);
+        setEnterprises(enterprisesData);
+        setCustomPosters(postersData);
+        setContactQRs(qrData);
+
+        // 异步处理分类提取，避免阻塞主线程
+        setTimeout(() => {
+          const uniqueCategories = Array.from(new Set(docsData.map((doc: any) => doc.category)));
+          setCategories(['全部', ...uniqueCategories]);
+        }, 0);
+      });
 
     } catch (error) {
       console.error('加载数据失败:', error);
       alert('加载数据失败，请重新登录');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -494,9 +566,12 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         return;
       }
 
+      // 先上传图片到 ImageBB
+      const imageUrl = await imageUploadService.uploadImage(newPosterImage);
+
       const posterData = {
         name: newPosterName.trim(),
-        image_base64: newPosterImage
+        image_url: imageUrl
       };
 
       await api.createPoster(posterData, token);
@@ -534,9 +609,12 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         return;
       }
 
+      // 先上传图片到 ImageBB
+      const imageUrl = await imageUploadService.uploadImage(newQRImage);
+
       const qrData = {
         name: newQRName.trim(),
-        image_base64: newQRImage
+        image_url: imageUrl
       };
 
       await api.createContactQR(qrData, token);
@@ -586,13 +664,13 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
 
   return (
     <div className="min-h-screen bg-[#0a0c10] text-slate-300 flex font-sans overflow-hidden">
-      {/* Sidebar */}
+      {/* Sidebar - 使用 memoized 组件 */}
       <div className="w-80 bg-[#12151c] border-r border-slate-800 flex flex-col shadow-2xl">
         <div className="p-8 border-b border-slate-800 flex items-center gap-3">
           <div className="bg-orange-500 p-2 rounded-xl"><ShieldCheck className="text-white" size={24} /></div>
           <div><h1 className="text-lg font-black text-white">东元后台</h1><p className="text-[8px] text-orange-500 uppercase font-bold tracking-widest">Legal OS v4.1</p></div>
         </div>
-        
+
         <nav className="flex-1 p-6 space-y-2">
           {[
             { id: 'kb', icon: BrainCircuit, label: 'AI 知识引擎', desc: '训练语料与提示词配置' },
@@ -614,11 +692,14 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
             </button>
           ))}
         </nav>
-        
+
         <div className="p-6"><button onClick={onLogout} className="w-full py-4 bg-red-500/10 text-red-500 rounded-2xl font-bold text-xs">退出后台管理</button></div>
       </div>
 
       <main className="flex-1 overflow-y-auto p-10 bg-[#0a0c10] no-scrollbar">
+        {/* Loading Indicator - 使用 memoized 组件 */}
+        {isLoading && <LoadingIndicator />}
+
         {/* KB Tab */}
         {activeTab === 'kb' && (
           <div className="grid grid-cols-2 gap-8 h-full">
@@ -750,13 +831,13 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         {/* Users Tab (Updated with Approval) */}
         {activeTab === 'users' && (
           <div className="space-y-8">
-             
-             {/* 待审核列表 */}
-             {users.some(u => u.approval_status === 'PENDING') && (
+
+             {/* 待审核列表 - 使用 memoized 数据 */}
+             {memoizedData.pendingUsers.length > 0 && (
                <div className="bg-orange-500/10 border border-orange-500/30 rounded-3xl p-6">
-                 <h4 className="font-bold text-orange-500 flex items-center gap-2 mb-4"><UserCheck size={18} /> 待审核注册申请</h4>
+                 <h4 className="font-bold text-orange-500 flex items-center gap-2 mb-4"><UserCheck size={18} /> 待审核注册申请 ({memoizedData.pendingUsers.length})</h4>
                  <div className="space-y-3">
-                    {users.filter(u => u.approval_status === 'PENDING').map(u => (
+                    {memoizedData.pendingUsers.map(u => (
                       <div key={u.id} className="bg-[#12151c] rounded-2xl p-4 flex items-center justify-between border border-slate-800">
                          <div className="flex items-center gap-4">
                             <div className="bg-slate-800 p-2 rounded-lg text-slate-400"><UserPlus size={20} /></div>
@@ -777,7 +858,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
 
              <div className="bg-[#12151c] rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
                <div className="p-6 border-b border-slate-800 bg-black/20">
-                  <h4 className="font-bold text-white text-sm">正式员工列表</h4>
+                  <h4 className="font-bold text-white text-sm">正式员工列表 ({memoizedData.approvedUsers.length})</h4>
                </div>
                <table className="w-full text-left border-collapse">
                  <thead>
@@ -789,7 +870,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-slate-800">
-                   {users.filter(u => u.approval_status !== 'PENDING').map(u => (
+                   {memoizedData.approvedUsers.map(u => (
                      <tr key={u.id} className="hover:bg-white/5 transition-colors group">
                        <td className="p-6 font-bold text-white text-sm">
                           <div className="flex items-center gap-3">
@@ -836,7 +917,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
              <div className="flex justify-between items-center bg-[#12151c] p-8 rounded-3xl border border-slate-800">
                <div>
                   <h3 className="font-black text-white text-xl">物业公司主体管理</h3>
-                  <p className="text-xs text-slate-500 mt-2">创建公司后，可在“员工账号体系”中分配账号归属。</p>
+                  <p className="text-xs text-slate-500 mt-2">创建公司后，可在"员工账号体系"中分配账号归属。</p>
                </div>
                <button onClick={() => setShowCompanyModal(true)} className="bg-orange-500 text-white px-8 py-3 rounded-xl text-xs font-bold flex items-center gap-2">
                  <Plus size={16} /> 新增公司
@@ -844,20 +925,20 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
              </div>
 
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {enterprises.map(ent => (
-                  <div key={ent} className="bg-[#12151c] border border-slate-800 rounded-3xl p-6 flex items-center justify-between group hover:border-orange-500/30 transition-all">
+                {memoizedData.enterprisesWithUserCount.map(({ name, userCount }) => (
+                  <div key={name} className="bg-[#12151c] border border-slate-800 rounded-3xl p-6 flex items-center justify-between group hover:border-orange-500/30 transition-all">
                     <div className="flex items-center gap-4">
                        <div className="bg-white/5 p-3 rounded-xl text-slate-300 group-hover:bg-orange-500 group-hover:text-white transition-colors">
                           <Building size={24} />
                        </div>
                        <div>
-                          <div className="font-bold text-white">{ent}</div>
+                          <div className="font-bold text-white">{name}</div>
                           <div className="text-[10px] text-slate-500 mt-1">
-                             现有员工: {users.filter(u => u.enterprise_name === ent).length} 人
+                             现有员工: {userCount} 人
                           </div>
                        </div>
                     </div>
-                    <button onClick={() => handleDeleteCompany(ent)} className="p-2 text-slate-600 hover:text-red-500 transition-colors">
+                    <button onClick={() => handleDeleteCompany(name)} className="p-2 text-slate-600 hover:text-red-500 transition-colors">
                        <Trash2 size={16} />
                     </button>
                   </div>
@@ -966,13 +1047,32 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 {customPosters.map(p => (
                   <div key={p.id} className="bg-[#12151c] border border-slate-800 rounded-3xl overflow-hidden group relative aspect-[3/4]">
-                    <img src={p.imageBase64} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" alt={p.name} />
+                    {(p.imageUrl || p.image_url) ? (
+                      <img
+                        src={p.imageUrl || p.image_url}
+                        className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity"
+                        alt={p.name}
+                        onError={(e) => {
+                          console.error('海报图片加载失败:', p.imageUrl || p.image_url);
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    {!(p.imageUrl || p.image_url) && (
+                      <div className="w-full h-full flex items-center justify-center bg-slate-800">
+                        <div className="text-center">
+                          <ImageIcon size={32} className="text-slate-600 mx-auto mb-2" />
+                          <div className="text-xs text-slate-500">暂无图片</div>
+                        </div>
+                      </div>
+                    )}
                     <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/90 to-transparent">
                       <div className="font-bold text-white text-xs mb-1">{p.name}</div>
-                      <div className="text-[9px] text-slate-400">{new Date(p.createdAt).toLocaleDateString()}</div>
+                      <div className="text-[9px] text-slate-400">{p.createdAt ? new Date(p.createdAt).toLocaleDateString() : 'Invalid Date'}</div>
                     </div>
-                    <button 
-                      onClick={() => deleteItem('poster', p.id)} 
+                    <button
+                      onClick={() => deleteItem('poster', p.id)}
                       className="absolute top-2 right-2 p-2 bg-red-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
                     >
                       <Trash2 size={14} />
@@ -994,14 +1094,33 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
                 {contactQRs.map(qr => (
                   <div key={qr.id} className="bg-[#12151c] border border-slate-800 rounded-3xl p-4 flex flex-col items-center group relative">
                     <div className="w-full aspect-square bg-white rounded-2xl p-2 mb-3">
-                       <img src={qr.imageBase64} className="w-full h-full object-contain" alt={qr.name} />
+                       {(qr.imageUrl || qr.image_url) ? (
+                         <img
+                           src={qr.imageUrl || qr.image_url}
+                           className="w-full h-full object-contain"
+                           alt={qr.name}
+                           onError={(e) => {
+                             console.error('二维码图片加载失败:', qr.imageUrl || qr.image_url);
+                             e.currentTarget.style.display = 'none';
+                             e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                           }}
+                         />
+                       ) : null}
+                       {!(qr.imageUrl || qr.image_url) && (
+                         <div className="w-full h-full flex items-center justify-center bg-slate-100 rounded-xl">
+                           <div className="text-center">
+                             <Smartphone size={32} className="text-slate-400 mx-auto mb-2" />
+                             <div className="text-xs text-slate-500">暂无二维码</div>
+                           </div>
+                         </div>
+                       )}
                     </div>
                     <div className="text-center">
                       <div className="font-bold text-white text-sm mb-1">{qr.name}</div>
-                      <div className="text-[9px] text-slate-500">上传于 {new Date(qr.createdAt).toLocaleDateString()}</div>
+                      <div className="text-[9px] text-slate-500">上传于 {qr.createdAt ? new Date(qr.createdAt).toLocaleDateString() : 'Invalid Date'}</div>
                     </div>
-                    <button 
-                      onClick={() => deleteItem('qr', qr.id)} 
+                    <button
+                      onClick={() => deleteItem('qr', qr.id)}
                       className="absolute top-2 right-2 p-2 bg-red-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
                     >
                       <Trash2 size={14} />

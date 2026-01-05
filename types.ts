@@ -83,15 +83,17 @@ export interface ChatMessage {
 export interface CustomPosterTemplate {
   id: string;
   name: string;
-  imageBase64: string;
-  createdAt: number;
+  imageUrl?: string;  // 前端使用的字段名
+  image_url?: string; // 后端返回的字段名
+  createdAt?: number;
 }
 
 export interface ContactQRCode {
   id: string;
-  name: string; 
-  imageBase64: string;
-  createdAt: number;
+  name: string;
+  imageUrl?: string;  // 前端使用的字段名
+  image_url?: string; // 后端返回的字段名
+  createdAt?: number;
 }
 
 // 新增：系统全局配置接口
