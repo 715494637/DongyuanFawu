@@ -64,7 +64,19 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
   const getToken = () => {
     return localStorage.getItem('token') || sessionStorage.getItem('token');
   };
-  
+
+  // 检查错误是否是认证错误
+  const isAuthError = (error: any) => {
+    return error?.status === 401 || error?.message?.includes('无效的Token') || error?.detail?.includes('无效的Token');
+  };
+
+  // 处理认证错误
+  const handleAuthError = () => {
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
+    onLogout();
+  };
+
   // Data States
   const [kbText, setKbText] = useState('');
   const [docs, setDocs] = useState<DocumentItem[]>([]);
@@ -73,7 +85,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
   const [evidenceList, setEvidenceList] = useState<EvidenceGroup[]>([]);
   const [lawArticles, setLawArticles] = useState<LawArticle[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [enterprises, setEnterprises] = useState<string[]>([]); 
+  const [enterprises, setEnterprises] = useState<string[]>([]);
   const [customPosters, setCustomPosters] = useState<CustomPosterTemplate[]>([]);
   const [contactQRs, setContactQRs] = useState<ContactQRCode[]>([]);
   const [systemConfig, setSystemConfig] = useState<SystemConfig>({ enablePhoneLogin: true, welcomeMessage: '' });
@@ -87,6 +99,10 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
 
   // Loading state
   const [isLoading, setIsLoading] = useState(true);
+
+  // Error state
+  const [hasError, setHasError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   
   // Modals / Editing States
   const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
@@ -121,19 +137,27 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
 
   // 使用 useMemo 优化计算
   const memoizedData = useMemo(() => ({
-    pendingUsers: users.filter(u => u.approval_status === 'PENDING'),
-    approvedUsers: users.filter(u => u.approval_status !== 'PENDING'),
-    docCategories: categories,
-    enterprisesWithUserCount: enterprises.map(ent => ({
+    pendingUsers: Array.isArray(users) ? users.filter(u => u.approval_status === 'PENDING') : [],
+    approvedUsers: Array.isArray(users) ? users.filter(u => u.approval_status !== 'PENDING') : [],
+    docCategories: Array.isArray(categories) ? categories : [],
+    enterprisesWithUserCount: Array.isArray(enterprises) ? enterprises.map(ent => ({
       name: ent,
-      userCount: users.filter(u => u.enterprise_name === ent).length
-    }))
+      userCount: Array.isArray(users) ? users.filter(u => u.enterprise_name === ent).length : 0
+    })) : []
   }), [users, categories, enterprises]);
 
   const refreshData = async () => {
     setIsLoading(true);
+    setHasError(false);
+    setErrorMessage('');
+
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const token = getToken();
+
+      if (!token) {
+        handleAuthError();
+        return;
+      }
 
       // 并行获取所有数据
       const [
@@ -152,7 +176,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         api.getRisks(),
         api.getEvidence(),
         api.getCivilCode(),
-        api.getUsers(token!),
+        api.getUsers(token),
         api.getEnterprises(),
         api.getPosters(),
         api.getContactQR()
@@ -162,51 +186,96 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
       requestAnimationFrame(() => {
         // 批量更新配置相关状态
         const configUpdates = {
-          enable_phone_login: configData.enable_phone_login,
-          welcome_message: configData.welcome_message
+          enable_phone_login: configData?.enable_phone_login || false,
+          welcome_message: configData?.welcome_message || ''
         };
 
         setSystemConfig(configUpdates);
         setTempConfig({
-          enablePhoneLogin: configData.enable_phone_login,
-          welcomeMessage: configData.welcome_message
+          enablePhoneLogin: configUpdates.enable_phone_login,
+          welcomeMessage: configUpdates.welcome_message
         });
-        setKbText(configData.ai_knowledge_base || '');
-        setSplashImage(configData.splash_image || null);
+        setKbText(configData?.ai_knowledge_base || '');
+        setSplashImage(configData?.splash_image || null);
 
-        // 批量更新列表数据
-        setDocs(docsData);
-        setRiskScenarios(risksData);
-        setEvidenceList(evidenceData);
-        setLawArticles(lawsData);
-        setUsers(usersData);
-        setEnterprises(enterprisesData);
-        setCustomPosters(postersData);
-        setContactQRs(qrData);
+        // 批量更新列表数据，确保数据是数组格式
+        setDocs(Array.isArray(docsData) ? docsData : []);
+        setRiskScenarios(Array.isArray(risksData) ? risksData : []);
+        setEvidenceList(Array.isArray(evidenceData) ? evidenceData : []);
+        setLawArticles(Array.isArray(lawsData) ? lawsData : []);
+        setUsers(Array.isArray(usersData) ? usersData : []);
+        setEnterprises(Array.isArray(enterprisesData) ? enterprisesData : []);
+        setCustomPosters(Array.isArray(postersData) ? postersData : []);
+        setContactQRs(Array.isArray(qrData) ? qrData : []);
 
         // 异步处理分类提取，避免阻塞主线程
         setTimeout(() => {
-          const uniqueCategories = Array.from(new Set(docsData.map((doc: any) => doc.category)));
-          setCategories(['全部', ...uniqueCategories]);
+          if (Array.isArray(docsData) && docsData.length > 0) {
+            const uniqueCategories = Array.from(new Set(docsData.map((doc: any) => doc.category).filter(Boolean)));
+            setCategories(['全部', ...uniqueCategories]);
+          } else {
+            setCategories(['全部']);
+          }
         }, 0);
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载数据失败:', error);
-      alert('加载数据失败，请重新登录');
+
+      // 检查是否是认证错误
+      if (isAuthError(error)) {
+        handleAuthError();
+        return;
+      }
+
+      // 其他错误
+      setHasError(true);
+      setErrorMessage(error?.message || error?.detail || '加载数据失败，请刷新页面重试');
+
+      // 设置默认空数据，防止页面崩溃
+      setDocs([]);
+      setRiskScenarios([]);
+      setEvidenceList([]);
+      setLawArticles([]);
+      setUsers([]);
+      setEnterprises([]);
+      setCustomPosters([]);
+      setContactQRs([]);
+      setCategories(['全部']);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const saveKB = async () => {
+  // 通用 API 调用包装器
+  const withErrorHandling = async (apiCall: () => Promise<any>, successMessage?: string) => {
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      await api.updateConfig({ ai_knowledge_base: kbText }, token!);
-      alert('AI 知识库与系统指令已同步成功。');
-    } catch (error) {
-      alert('保存失败，请重试');
+      const result = await apiCall();
+      if (successMessage) {
+        alert(successMessage);
+      }
+      return result;
+    } catch (error: any) {
+      if (isAuthError(error)) {
+        handleAuthError();
+        return null;
+      }
+      const errorMsg = error?.detail || error?.message || '操作失败，请重试';
+      alert(errorMsg);
+      throw error;
     }
+  };
+
+  const saveKB = async () => {
+    const token = getToken();
+    if (!token) {
+      handleAuthError();
+      return;
+    }
+    await withErrorHandling(
+      () => api.updateConfig({ ai_knowledge_base: kbText }, token),
+      'AI 知识库与系统指令已同步成功。'
+    );
   };
 
   const handleConfigChange = (newConfig: Partial<SystemConfig>) => {
@@ -216,21 +285,22 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
 
   // 保存系统配置
   const saveSystemConfig = async () => {
-    try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const payload = {
-        enable_phone_login: tempConfig.enablePhoneLogin,
-        welcome_message: tempConfig.welcomeMessage
-      };
-      await api.updateConfig(payload, token!);
+    const token = getToken();
+    if (!token) {
+      handleAuthError();
+      return;
+    }
+    const payload = {
+      enable_phone_login: tempConfig.enablePhoneLogin,
+      welcome_message: tempConfig.welcomeMessage
+    };
+    await withErrorHandling(async () => {
+      await api.updateConfig(payload, token);
       setSystemConfig({
         enable_phone_login: tempConfig.enablePhoneLogin,
         welcome_message: tempConfig.welcomeMessage
       });
-      alert('系统配置保存成功！');
-    } catch (error) {
-      alert('配置保存失败，请重试');
-    }
+    }, '系统配置保存成功！');
   };
 
   // --- Splash Config Logic ---
@@ -240,15 +310,15 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
       const reader = new FileReader();
       reader.onload = async (ev) => {
         const base64 = ev.target?.result as string;
-        try {
-          const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-          await api.uploadSplashImage({ splash_image: base64 }, token!);
-          setSplashImage(base64);
-          alert('开屏图已更新，下次启动应用时生效。');
-        } catch (error) {
-          console.error('Failed to upload splash image:', error);
-          alert('上传开屏图失败，请重试。');
+        const token = getToken();
+        if (!token) {
+          handleAuthError();
+          return;
         }
+        await withErrorHandling(async () => {
+          await api.uploadSplashImage({ splash_image: base64 }, token);
+          setSplashImage(base64);
+        }, '开屏图已更新，下次启动应用时生效。');
       };
       reader.readAsDataURL(file);
     }
@@ -256,40 +326,44 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
 
   const handleResetSplash = async () => {
     if (confirm('确定要恢复默认的品牌开屏动画吗？')) {
-      try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        await api.deleteSplashImage(token!);
-        setSplashImage(null);
-        alert('开屏图已恢复默认。');
-      } catch (error) {
-        console.error('Failed to delete splash image:', error);
-        alert('恢复默认开屏图失败，请重试。');
+      const token = getToken();
+      if (!token) {
+        handleAuthError();
+        return;
       }
+      await withErrorHandling(async () => {
+        await api.deleteSplashImage(token);
+        setSplashImage(null);
+      }, '开屏图已恢复默认。');
     }
   };
 
   // --- User Approval Logic ---
   const handleApproveUser = async (userId: string) => {
     if (confirm('确定批准该用户注册申请吗？')) {
-      try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        await api.approveUser(userId, token!);
-        refreshData();
-      } catch (error) {
-        alert('审批失败，请重试');
+      const token = getToken();
+      if (!token) {
+        handleAuthError();
+        return;
       }
+      await withErrorHandling(async () => {
+        await api.approveUser(userId, token);
+        refreshData();
+      }, '用户审批成功！');
     }
   };
 
   const handleRejectUser = async (userId: string) => {
     if (confirm('确定拒绝该用户注册申请吗？')) {
-      try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        await api.deleteUser(userId, token!);
-        refreshData();
-      } catch (error) {
-        alert('删除用户失败，请重试');
+      const token = getToken();
+      if (!token) {
+        handleAuthError();
+        return;
       }
+      await withErrorHandling(async () => {
+        await api.deleteUser(userId, token);
+        refreshData();
+      }, '用户已拒绝！');
     }
   };
 
@@ -299,20 +373,20 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
     e.preventDefault();
     if (!editingDoc) return;
 
-    try {
-      const token = getToken();
-      if (!token) {
-        alert('请先登录');
-        return;
-      }
+    const token = getToken();
+    if (!token) {
+      handleAuthError();
+      return;
+    }
 
-      const docData = {
-        title: editingDoc.title,
-        category: editingDoc.category,
-        description: editingDoc.description,
-        content: editingDoc.content
-      };
+    const docData = {
+      title: editingDoc.title,
+      category: editingDoc.category,
+      description: editingDoc.description,
+      content: editingDoc.content
+    };
 
+    await withErrorHandling(async () => {
       if (editingDoc.id) {
         // 更新现有文档
         await api.updateDocument(editingDoc.id, docData, token);
@@ -320,13 +394,9 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         // 创建新文档
         await api.createDocument(docData, token);
       }
-
       refreshData();
       setEditingDoc(null);
-    } catch (error) {
-      console.error('保存文档失败:', error);
-      alert('保存文档失败，请重试');
-    }
+    }, '文档保存成功！');
   };
 
   const handleAddCategory = () => {
@@ -363,38 +433,32 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
       return;
     }
 
-    try {
-      const token = getToken();
-      if (!token) {
-        alert('请先登录');
-        return;
-      }
+    const token = getToken();
+    if (!token) {
+      handleAuthError();
+      return;
+    }
 
+    await withErrorHandling(async () => {
       await api.createEnterprise(newCompanyName.trim(), token);
       refreshData();
       setNewCompanyName('');
       setShowCompanyModal(false);
-    } catch (error) {
-      console.error('添加公司失败:', error);
-      alert('添加公司失败，请重试');
-    }
+    }, '公司创建成功！');
   };
 
   const handleDeleteCompany = async (name: string) => {
     if (confirm(`确定删除物业公司"${name}"吗？\n删除后，隶属于该公司的员工账号可能显示异常。`)) {
-      try {
-        const token = getToken();
-        if (!token) {
-          alert('请先登录');
-          return;
-        }
+      const token = getToken();
+      if (!token) {
+        handleAuthError();
+        return;
+      }
 
+      await withErrorHandling(async () => {
         await api.deleteEnterprise(name, token);
         refreshData();
-      } catch (error) {
-        console.error('删除公司失败:', error);
-        alert('删除公司失败，请重试');
-      }
+      }, '公司删除成功！');
     }
   };
 
@@ -403,20 +467,20 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
     e.preventDefault();
     if (!editingRisk) return;
 
-    try {
-      const token = getToken();
-      if (!token) {
-        alert('请先登录');
-        return;
-      }
+    const token = getToken();
+    if (!token) {
+      handleAuthError();
+      return;
+    }
 
-      const riskData = {
-        title: editingRisk.title,
-        risk_level: editingRisk.risk_level,
-        content: editingRisk.content,
-        questions: editingRisk.questions || []
-      };
+    const riskData = {
+      title: editingRisk.title,
+      risk_level: editingRisk.risk_level,
+      content: editingRisk.content,
+      questions: editingRisk.questions || []
+    };
 
+    await withErrorHandling(async () => {
       if (editingRisk.id) {
         // 更新现有风险场景
         await api.updateRisk(editingRisk.id, riskData, token);
@@ -424,13 +488,9 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         // 创建新风险场景
         await api.createRisk(riskData, token);
       }
-
       refreshData();
       setEditingRisk(null);
-    } catch (error) {
-      console.error('保存风险场景失败:', error);
-      alert('保存风险场景失败，请重试');
-    }
+    }, '风险场景保存成功！');
   };
 
   // --- Evidence Logic ---
@@ -438,18 +498,18 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
     e.preventDefault();
     if (!editingEvidence) return;
 
-    try {
-      const token = getToken();
-      if (!token) {
-        alert('请先登录');
-        return;
-      }
+    const token = getToken();
+    if (!token) {
+      handleAuthError();
+      return;
+    }
 
-      const evidenceData = {
-        title: editingEvidence.title,
-        items: editingEvidence.items || []
-      };
+    const evidenceData = {
+      title: editingEvidence.title,
+      items: editingEvidence.items || []
+    };
 
+    await withErrorHandling(async () => {
       if (editingEvidence.id) {
         // 更新现有证据清单
         await api.updateEvidence(editingEvidence.id, evidenceData, token);
@@ -457,13 +517,9 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         // 创建新证据清单
         await api.createEvidence(evidenceData, token);
       }
-
       refreshData();
       setEditingEvidence(null);
-    } catch (error) {
-      console.error('保存证据清单失败:', error);
-      alert('保存证据清单失败，请重试');
-    }
+    }, '证据清单保存成功！');
   };
 
   // --- Law Logic ---
@@ -471,18 +527,18 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
     e.preventDefault();
     if (!editingLaw) return;
 
-    try {
-      const token = getToken();
-      if (!token) {
-        alert('请先登录');
-        return;
-      }
+    const token = getToken();
+    if (!token) {
+      handleAuthError();
+      return;
+    }
 
-      const lawData = {
-        title: editingLaw.title,
-        content: editingLaw.content
-      };
+    const lawData = {
+      title: editingLaw.title,
+      content: editingLaw.content
+    };
 
+    await withErrorHandling(async () => {
       if (editingLaw.id) {
         // 更新现有民法典条文
         await api.updateCivilCode(editingLaw.id, lawData, token);
@@ -490,13 +546,9 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         // 创建新民法典条文
         await api.createCivilCode(lawData, token);
       }
-
       refreshData();
       setEditingLaw(null);
-    } catch (error) {
-      console.error('保存民法典条文失败:', error);
-      alert('保存民法典条文失败，请重试');
-    }
+    }, '民法典条文保存成功！');
   };
 
   // --- User Logic ---
@@ -509,23 +561,23 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
       return;
     }
 
-    try {
-      const token = getToken();
-      if (!token) {
-        alert('请先登录');
-        return;
-      }
+    const token = getToken();
+    if (!token) {
+      handleAuthError();
+      return;
+    }
 
-      const userData = {
-        username: editingUser.username,
-        password: editingUser.password,
-        phone_number: editingUser.phone_number,
-        enterprise_name: editingUser.enterprise_name,
-        role: editingUser.role,
-        approval_status: editingUser.approval_status,
-        is_certified: editingUser.is_certified
-      };
+    const userData = {
+      username: editingUser.username,
+      password: editingUser.password,
+      phone_number: editingUser.phone_number,
+      enterprise_name: editingUser.enterprise_name,
+      role: editingUser.role,
+      approval_status: editingUser.approval_status,
+      is_certified: editingUser.is_certified
+    };
 
+    await withErrorHandling(async () => {
       if (editingUser.id) {
         // 更新现有用户
         await api.updateUser(editingUser.id, userData, token);
@@ -533,14 +585,9 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
         // 创建新用户（管理员直接创建）
         await api.createUserByAdmin(userData, token);
       }
-
       refreshData();
       setEditingUser(null);
-    } catch (error: any) {
-      console.error('保存用户失败:', error);
-      const errorMsg = error.detail || error.message || '保存用户失败，请重试';
-      alert(errorMsg);
-    }
+    }, '用户保存成功！');
   };
   
   // --- Poster Logic ---
@@ -559,13 +606,13 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
     e.preventDefault();
     if (!newPosterName.trim() || !newPosterImage) return;
 
-    try {
-      const token = getToken();
-      if (!token) {
-        alert('请先登录');
-        return;
-      }
+    const token = getToken();
+    if (!token) {
+      handleAuthError();
+      return;
+    }
 
+    await withErrorHandling(async () => {
       // 先上传图片到 ImageBB
       const imageUrl = await imageUploadService.uploadImage(newPosterImage);
 
@@ -580,10 +627,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
       setNewPosterName('');
       setNewPosterImage(null);
       setShowPosterModal(false);
-    } catch (error) {
-      console.error('保存海报失败:', error);
-      alert('保存海报失败，请重试');
-    }
+    }, '海报模板保存成功！');
   };
 
   // --- QR Code Logic ---
@@ -602,13 +646,13 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
     e.preventDefault();
     if (!newQRName.trim() || !newQRImage) return;
 
-    try {
-      const token = getToken();
-      if (!token) {
-        alert('请先登录');
-        return;
-      }
+    const token = getToken();
+    if (!token) {
+      handleAuthError();
+      return;
+    }
 
+    await withErrorHandling(async () => {
       // 先上传图片到 ImageBB
       const imageUrl = await imageUploadService.uploadImage(newQRImage);
 
@@ -623,22 +667,19 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
       setNewQRName('');
       setNewQRImage(null);
       setShowQRModal(false);
-    } catch (error) {
-      console.error('保存二维码失败:', error);
-      alert('保存二维码失败，请重试');
-    }
+    }, '咨询通道二维码保存成功！');
   };
 
   const deleteItem = async (type: 'doc'|'risk'|'evidence'|'law'|'user'|'poster'|'qr', id: string) => {
     if (!confirm('确定删除此项吗？')) return;
 
-    try {
-      const token = getToken();
-      if (!token) {
-        alert('请先登录');
-        return;
-      }
+    const token = getToken();
+    if (!token) {
+      handleAuthError();
+      return;
+    }
 
+    await withErrorHandling(async () => {
       if (type === 'doc') {
         await api.deleteDocument(id, token);
       } else if (type === 'risk') {
@@ -656,10 +697,7 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
       }
 
       refreshData();
-    } catch (error) {
-      console.error('删除失败:', error);
-      alert('删除失败，请重试');
-    }
+    }, '删除成功！');
   };
 
   return (
@@ -699,6 +737,38 @@ const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
       <main className="flex-1 overflow-y-auto p-10 bg-[#0a0c10] no-scrollbar">
         {/* Loading Indicator - 使用 memoized 组件 */}
         {isLoading && <LoadingIndicator />}
+
+        {/* Error State */}
+        {hasError && !isLoading && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+            <div className="bg-[#12151c] p-8 rounded-3xl border border-slate-800 flex flex-col items-center gap-6 shadow-2xl max-w-md">
+              <div className="bg-red-500/20 p-4 rounded-full">
+                <XCircle size={48} className="text-red-500" />
+              </div>
+              <div className="text-center">
+                <h2 className="text-xl font-bold text-white mb-2">加载数据失败</h2>
+                <p className="text-sm text-slate-400 mb-6">{errorMessage}</p>
+              </div>
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="flex-1 py-3 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 transition-colors"
+                >
+                  刷新页面
+                </button>
+                <button
+                  onClick={() => {
+                    setHasError(false);
+                    refreshData();
+                  }}
+                  className="flex-1 py-3 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 transition-colors"
+                >
+                  重试
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* KB Tab */}
         {activeTab === 'kb' && (
