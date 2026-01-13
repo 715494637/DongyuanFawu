@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Lock, ArrowRight, CheckCircle2, Circle, X, FileText, ChevronRight, Smartphone, KeyRound, Building, UserPlus, Check } from 'lucide-react';
-import { api } from '../services/apiService';
+import { User, Lock, ArrowRight, CheckCircle2, Circle, X, FileText, ChevronRight, Smartphone, KeyRound, Building, UserPlus, Check, Zap } from 'lucide-react';
+import { db } from '../services/dbService';
 import { User as UserType, UserRole, ApprovalStatus } from '../types';
 
 interface LoginProps {
@@ -11,12 +11,7 @@ interface LoginProps {
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [loginMethod, setLoginMethod] = useState<'password' | 'phone'>('password');
   const [enablePhoneLogin, setEnablePhoneLogin] = useState(true);
-  const [rememberMe, setRememberMe] = useState(true); // 默认为 true，提升体验
-
-  // 获取token的辅助函数
-  const getToken = () => {
-    return localStorage.getItem('token') || sessionStorage.getItem('token');
-  };
+  const [rememberMe, setRememberMe] = useState(true);
 
   // 密码登录状态
   const [username, setUsername] = useState('');
@@ -45,52 +40,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [regError, setRegError] = useState('');
 
   useEffect(() => {
-    // 获取系统配置
-    const loadInitialData = async () => {
-      try {
-        const config = await api.getConfig();
-        setEnablePhoneLogin(config.enablePhoneLogin);
-
-        const enterprises = await api.getEnterprises();
-        setEnterprises(enterprises);
-
-        // 设置默认协议文本
-        setAgreementText(`【东元法务通 · 用户服务协议及免责声明】
-
-版本日期：2025年3月1日
-
-一、服务内容
-本平台（以下简称"本系统"）由东元法务中心开发，旨在为物业管理人员提供数字化的法律辅助工具，包括但不限于法律法规查询、文书模版生成、合规风险自查及 AI 智能问答服务。
-
-二、用户账号安全
-1. 用户应当妥善保管账号及密码，不得将账号出借、转让或与他人共享。
-2. 因用户个人原因导致的账号泄露或企业数据丢失，本系统不承担责任。
-3. 请务必对上传至"我的企业"中的内部数据（如欠费清单、业主隐私信息）进行脱敏处理。
-
-三、特别免责声明（重要风险提示）
-1. AI 辅助建议属性：
-   本系统中的"AI 法务助手"、"AI 文书定制"及"纠纷快诊"功能，均基于人工智能大模型技术生成。AI 回复内容仅供参考，不代表东元律师事务所或任何执业律师的正式法律意见。
-
-2. 非正式法律咨询：
-   本系统提供的建议不能替代专业律师的线下咨询。对于涉及重大经济利益（如金额超过 5 万元的诉讼）、人身伤害、刑事责任或复杂产权纠纷的案件，请务必使用系统内的"一键咨询"功能联系人工律师，或寻求线下专业法律服务。
-
-3. 结果使用责任：
-   用户基于本系统生成的文书（如律师函、公告）、计算结果（如滞纳金）或建议采取的行动，均由用户自行承担最终法律后果。本系统不对因使用 AI 建议而产生的任何直接或间接损失承担赔偿责任。
-
-四、知识产权
-本系统内的所有源代码、界面设计、独家文书模版及法律知识库内容的知识产权归东元法物所有，未经授权不得进行反向工程或商业售卖。
-
-五、协议生效
-当您勾选"我已阅读并同意"或点击"授权登录"按钮时，即视为您已完全理解并接受本协议的全部条款。`);
-      } catch (error) {
-        console.error('Failed to load initial data:', error);
-        // 设置默认值
-        setEnablePhoneLogin(true);
-        setEnterprises(['东元示范物业']);
-      }
-    };
-
-    loadInitialData();
+    setAgreementText(db.getAgreement());
+    const config = db.getSystemConfig();
+    setEnablePhoneLogin(config.enablePhoneLogin);
+    setEnterprises(db.getEnterprises());
   }, []);
 
   useEffect(() => {
@@ -102,8 +55,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   const checkApprovalStatus = (user: UserType): boolean => {
     if (user.role === UserRole.ADMIN) return true;
-
-    const status = user.approval_status || 'APPROVED';
+    
+    const status = user.approvalStatus || 'APPROVED';
     if (status === 'PENDING') {
       setError('账号正在审核中，请联系管理员审批');
       return false;
@@ -115,117 +68,100 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     return true;
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreed) {
       setError('请先阅读并同意服务协议');
       return;
     }
 
-    try {
-      let response;
+    const users = db.getUsers();
+    let found: UserType | undefined;
 
-      if (loginMethod === 'password') {
-        response = await api.login(username.trim(), password.trim());
-      } else {
-        if (verifyCode !== '8888') {
-          setError('验证码错误');
-          return;
-        }
-        // 手机号登录使用特殊标识
-        response = await api.login(phoneNumber.trim(), 'phone-login');
-      }
+    if (loginMethod === 'password') {
+       const cleanUsername = username.trim();
+       const cleanPassword = password.trim();
+       found = users.find(u => u.username === cleanUsername && u.password === cleanPassword);
+       if (!found) {
+         setError('账户或密码验证失败');
+         return;
+       }
+    } else {
+       if (verifyCode !== '8888') {
+         setError('验证码错误');
+         return;
+       }
+       found = db.getUserByPhone(phoneNumber.trim());
+       if (!found) {
+         setError('该手机号未注册');
+         return;
+       }
+    }
 
-      if (response.access_token) {
-        // 存储token
-        if (rememberMe) {
-          localStorage.setItem('token', response.access_token);
-        } else {
-          sessionStorage.setItem('token', response.access_token);
-        }
-        onLogin(response.user, rememberMe);
-      } else {
-        setError(response.detail || '登录失败，请重试');
-      }
-    } catch (error) {
-      setError('登录失败，请重试');
+    if (found && checkApprovalStatus(found)) {
+      onLogin(found, rememberMe);
     }
   };
 
-  const handleOneClickLogin = async () => {
+  const handleOneClickLogin = () => {
     if (!agreed) {
         setError('请先阅读并同意服务协议');
         return;
     }
-
-    try {
-      const token = getToken();
-      if (!token) {
-        setError('请先登录');
-        return;
-      }
-
-      // 使用API获取用户列表
-      const users = await api.getUsers(token);
-      let demoUser = users.find(u => u.phone_number === '13900000000');
-
-      if (!demoUser) {
-        demoUser = users.find(u => u.approval_status === 'APPROVED');
-      }
-
-      if (demoUser && checkApprovalStatus(demoUser)) {
+    
+    // 模拟一键登录，优先查找演示账号，若无则查找任一可用账号
+    let demoUser = db.getUserByPhone('13900000000'); 
+    
+    if (!demoUser) {
+        // Fallback: Find the first user with a phone number that is approved
+        const users = db.getUsers();
+        demoUser = users.find(u => u.phoneNumber && (!u.approvalStatus || u.approvalStatus === 'APPROVED'));
+    }
+    
+    if (demoUser && checkApprovalStatus(demoUser)) {
         onLogin(demoUser, rememberMe);
-      } else {
-        setError('一键登录失败，请使用账号密码登录');
-      }
-    } catch (error) {
-      setError('一键登录失败，请使用账号密码登录');
+    } else {
+        setError('本机号码未绑定有效账号，请注册');
     }
   };
 
-  const sendCode = async () => {
+  const sendCode = () => {
     if (!phoneNumber || phoneNumber.length !== 11) {
       setError('请输入有效的11位手机号');
       return;
     }
-    try {
-      await api.sendSms(phoneNumber.trim());
-      setError('');
-      setCountdown(60);
-      alert('验证码已发送，请使用8888进行验证');
-    } catch (error) {
-      setError('发送验证码失败，请重试');
-    }
+    setError('');
+    setCountdown(60);
+    alert('【东元法物】验证码已发送：8888');
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     if (!regUsername || !regPassword || !regPhone || !regEnterprise) {
       setRegError('请填写完整信息');
       return;
     }
-
+    
     try {
-      const response = await api.register({
+      db.registerUser({
+        id: Date.now().toString(),
         username: regUsername.trim(),
         password: regPassword.trim(),
-        phone_number: regPhone.trim(),
-        enterprise_name: regEnterprise
+        phoneNumber: regPhone.trim(),
+        role: UserRole.USER,
+        enterpriseName: regEnterprise,
+        isCertified: false,
+        approvalStatus: 'PENDING'
       });
-
-      if (response.message) {
-        alert('注册申请已提交！请等待管理员审核。');
-        setShowRegister(false);
-        setRegUsername('');
-        setRegPassword('');
-        setRegPhone('');
-        setRegEnterprise('');
-        setRegError('');
-      } else {
-        setRegError(response.detail || '注册失败');
-      }
+      alert('注册申请已提交！请等待管理员审核。');
+      setShowRegister(false);
+      setRegUsername('');
+      setRegPassword('');
+      setRegPhone('');
+      setRegEnterprise('');
+      setRegError('');
     } catch (err: any) {
-      setRegError('注册失败，请重试');
+      setRegError(err.message);
     }
   };
 
@@ -384,7 +320,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </div>
             )}
             
-            {/* 自动登录 (Remember Me) 选项 - 新增功能 */}
+            {/* 自动登录 (Remember Me) 选项 */}
             <div className="flex justify-between items-center px-2 mt-1">
                <div 
                  onClick={() => setRememberMe(!rememberMe)}
@@ -422,7 +358,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     : 'bg-white/5 text-white/60 border-white/10 hover:bg-white/10'
                   }`}
                 >
-                  <Smartphone size={16} className={agreed ? "text-yellow-300" : "text-white/40"} /> 本机号码一键登录
+                  <Zap size={16} className={agreed ? "text-yellow-300" : "text-white/40"} /> 本机号码一键登录
                 </button>
             )}
 

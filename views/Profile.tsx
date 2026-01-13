@@ -1,8 +1,8 @@
 
 import React, { useState, useRef } from 'react';
-import { Camera, Edit2, Check, X, LogOut, ShieldCheck, User as UserIcon } from 'lucide-react';
-import { User } from '../types';
-import { api } from '../services/apiService';
+import { Camera, Edit2, Check, X, LogOut, ShieldCheck, User as UserIcon, Crown } from 'lucide-react';
+import { User, UserRole } from '../types';
+import { db } from '../services/dbService';
 
 interface ProfileProps {
   user: User;
@@ -15,55 +15,37 @@ const Profile: React.FC<ProfileProps> = ({ user, setUser, onLogout }) => {
   const [tempName, setTempName] = useState(user.username);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUpdateName = async () => {
+  const handleUpdateName = () => {
     if (!tempName.trim()) return;
-
-    try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      if (!token) {
-        alert('请先登录');
-        return;
-      }
-
-      const updated = await api.updateUser(user.id, { username: tempName }, token);
-      if (updated) {
-        setUser(updated);
-        setIsEditingName(false);
-      }
-    } catch (error) {
-      console.error('更新用户名失败:', error);
-      alert('更新用户名失败，请重试');
+    const updated = db.updateUser(user.id, { username: tempName });
+    if (updated) {
+      setUser(updated);
+      setIsEditingName(false);
     }
   };
 
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      if (!token) {
-        alert('请先登录');
-        return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      const updated = db.updateUser(user.id, { avatarUrl: base64 });
+      if (updated) {
+        setUser(updated);
       }
+    };
+    reader.readAsDataURL(file);
+  };
 
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64 = event.target?.result as string;
-        try {
-          const updated = await api.updateUser(user.id, { avatar_url: base64 }, token);
-          if (updated) {
-            setUser(updated);
-          }
-        } catch (error) {
-          console.error('更新头像失败:', error);
-          alert('更新头像失败，请重试');
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch (error) {
-      console.error('头像处理失败:', error);
-      alert('头像处理失败，请重试');
+  const getRoleName = (role: UserRole) => {
+    switch (role) {
+      case UserRole.ADMIN: return '超级管理员';
+      case UserRole.EXECUTIVE: return '物业高管/老板';
+      case UserRole.MANAGER: return '项目负责人';
+      case UserRole.EMPLOYEE: return '普通员工';
+      default: return '普通用户';
     }
   };
 
@@ -123,12 +105,12 @@ const Profile: React.FC<ProfileProps> = ({ user, setUser, onLogout }) => {
           <div className="mt-2 flex items-center gap-2 px-4 py-1.5 bg-orange-50 rounded-full">
             <ShieldCheck size={14} className="text-orange-500" />
             <span className="text-xs font-bold text-orange-600 uppercase tracking-widest">
-              {user.enterprise_name || '个人账户'}
+              {user.enterpriseName || '个人账户'}
             </span>
           </div>
 
-          <div className={`mt-4 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${user.is_certified ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-            {user.is_certified ? '已通过企业实名认证' : '待完善企业资质'}
+          <div className={`mt-4 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${user.isCertified ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+            {user.isCertified ? '已通过企业实名认证' : '待完善企业资质'}
           </div>
         </div>
 
@@ -137,7 +119,7 @@ const Profile: React.FC<ProfileProps> = ({ user, setUser, onLogout }) => {
           <div className="flex justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
              <div className="flex flex-col">
                <span className="text-[10px] text-gray-400 font-bold uppercase">账户角色</span>
-               <span className="text-sm font-bold text-gray-700">{user.role === 'ADMIN' ? '超级管理员' : '物业终端用户'}</span>
+               <span className="text-sm font-bold text-gray-700">{getRoleName(user.role)}</span>
              </div>
              <div className="flex flex-col text-right">
                <span className="text-[10px] text-gray-400 font-bold uppercase">UID</span>
@@ -145,6 +127,15 @@ const Profile: React.FC<ProfileProps> = ({ user, setUser, onLogout }) => {
              </div>
           </div>
           
+          {(user.role === UserRole.EXECUTIVE || user.role === UserRole.MANAGER) && (
+              <div className="flex items-center justify-between p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                  <span className="text-xs font-bold text-orange-600 flex items-center gap-2"><Crown size={14}/> 您的权益</span>
+                  <div className="text-right">
+                      <div className="text-[10px] text-orange-400">函: {user.quota?.lawyerLetters || 0} / 询: {user.quota?.consultations || 0}</div>
+                  </div>
+              </div>
+          )}
+
           <button 
             onClick={onLogout}
             className="w-full flex items-center justify-center gap-3 py-4 bg-white border border-red-100 text-red-500 rounded-2xl font-bold text-sm hover:bg-red-50 transition-colors active:scale-[0.98]"
@@ -155,7 +146,7 @@ const Profile: React.FC<ProfileProps> = ({ user, setUser, onLogout }) => {
       </div>
       
       <p className="text-center text-[10px] text-gray-400 mt-8 font-medium uppercase tracking-[0.2em]">
-        Dongyuan Property Legal Link v3.1.0
+        Dongyuan Property Legal Link v4.2.0
       </p>
     </div>
   );

@@ -1,8 +1,10 @@
 
-import React, { useState } from 'react';
-import { ChevronRight, FileText, Sparkles, ArrowLeft, Shield, AlertTriangle, Camera, MessageSquare, Copy } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronRight, FileText, Sparkles, ArrowLeft, Shield, AlertTriangle, HeadphonesIcon, Camera, MessageSquare, Copy } from 'lucide-react';
 import { sendMessageToAI } from '../services/geminiService';
+import ConsultationModal from '../components/ConsultationModal';
 import { ViewState } from '../types';
+import { db } from '../services/dbService';
 
 interface DiagnosisProps {
   setCurrentView?: (view: ViewState) => void;
@@ -98,7 +100,12 @@ const Diagnosis: React.FC<DiagnosisProps> = ({ setCurrentView }) => {
   const [userInput, setUserInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiReport, setAiReport] = useState<string | null>(null);
-  
+  const [showConsult, setShowConsult] = useState(false);
+
+  useEffect(() => {
+      db.logUsage('DIAGNOSIS', '纠纷快诊');
+  }, []);
+
   const handleAIDiagnosis = async () => {
     if (!userInput.trim()) return;
     setIsAnalyzing(true);
@@ -111,8 +118,10 @@ const Diagnosis: React.FC<DiagnosisProps> = ({ setCurrentView }) => {
     请按以下结构输出（不要使用Markdown代码块，直接分段）：
     【风险评级】
     [高/中/低] 及简短理由。
-    【法律逻辑】
-    引用《民法典》及物业法规分析责任。
+    【核心法律风险点】
+    列出3个主要的法律风险点（例如：举证不能风险、诉讼时效风险、违约责任风险、侵权责任认定等）。
+    【初步法律意见】
+    引用《民法典》及物业法规，详细分析各方责任归属及法律依据，给出专业定性。
     【处置建议】
     3条物业现场可执行的建议。
     【取证提醒】
@@ -278,8 +287,20 @@ const Diagnosis: React.FC<DiagnosisProps> = ({ setCurrentView }) => {
           )}
         </div>
 
+        {!isAnalyzing && (
+          <div className="p-8 border-t border-gray-50 flex gap-3 bg-slate-50">
+            {/* Level 3: Human Funnel */}
+            <button 
+              onClick={() => setShowConsult(true)}
+              className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+               <HeadphonesIcon size={16} /> 案件复杂？一键咨询人工律师
+            </button>
+          </div>
+        )}
       </div>
 
+      <ConsultationModal isOpen={showConsult} onClose={() => setShowConsult(false)} />
     </div>
   );
 

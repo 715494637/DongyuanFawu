@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ViewState, User, UserRole } from './types';
+import { db } from './services/dbService';
 import Layout from './components/Layout';
 import Home from './views/Home';
 import Calculator from './views/Calculator';
@@ -18,43 +19,57 @@ import CivilCodeSearch from './views/CivilCodeSearch';
 import NoticeGenerator from './views/NoticeGenerator';
 import AIDocGen from './views/AIDocGen';
 import SplashScreen from './components/SplashScreen';
+import CollectionHelper from './views/CollectionHelper';
+import RenovationCheck from './views/RenovationCheck';
+import ScriptKit from './views/ScriptKit';
+import EmergencySOP from './views/EmergencySOP';
+import LawyerVideo from './views/LawyerVideo';
+import RightsCenter from './views/RightsCenter';
+import LegalHealthCheck from './views/LegalHealthCheck';
 
 const App: React.FC = () => {
-  const [showSplash, setShowSplash] = useState(true); // 控制开屏页状态
+  const [showSplash, setShowSplash] = useState(() => {
+      // Safe sync check for splash config
+      try {
+          const stored = localStorage.getItem('dy_system_config');
+          if (stored) {
+              const cfg = JSON.parse(stored);
+              return cfg.enableSplashScreen !== false; // Default true
+          }
+      } catch(e) {}
+      return true;
+  });
+  
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.HOME);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // 1. 检查会话持久化 (Auto Login)
-    const sessionId = localStorage.getItem('dy_session_user') || sessionStorage.getItem('dy_session_user');
+    // 1. 初始化数据库
+    db.init();
+    
+    // 2. 检查会话持久化 (Auto Login)
+    const sessionId = db.getSession();
     if (sessionId) {
-      // 从localStorage获取保存的用户信息
-      const savedUserStr = localStorage.getItem('dy_saved_user');
-      if (savedUserStr) {
-        try {
-          const savedUser = JSON.parse(savedUserStr);
-          if (savedUser.id === sessionId) {
-            setUser(savedUser);
-            if (savedUser.role === UserRole.ADMIN) {
-              setCurrentView(ViewState.ADMIN_DASHBOARD);
-            } else {
-              setCurrentView(ViewState.HOME);
-            }
-          }
-        } catch (error) {
-          console.error('Failed to parse saved user:', error);
+      const savedUser = db.getUserById(sessionId);
+      if (savedUser) {
+        setUser(savedUser);
+        if (savedUser.role === UserRole.ADMIN) {
+          setCurrentView(ViewState.ADMIN_DASHBOARD);
+        } else {
+          setCurrentView(ViewState.HOME);
         }
       }
     }
 
-    // 2. 设置开屏页显示时间 (2.5秒)
-    const timer = setTimeout(() => {
-      setShowSplash(false);
-    }, 2500);
-
-    return () => clearTimeout(timer);
-  }, []);
+    // 3. 设置开屏页显示时间 (2.5秒)
+    if (showSplash) {
+        const timer = setTimeout(() => {
+          setShowSplash(false);
+        }, 2500);
+        return () => clearTimeout(timer);
+    }
+  }, [showSplash]);
 
   // 监听视图变化，自动回滚到顶部
   useEffect(() => {
@@ -65,18 +80,7 @@ const App: React.FC = () => {
 
   const handleLogin = (loggedInUser: User, remember: boolean) => {
     setUser(loggedInUser);
-
-    // 保存会话信息
-    if (remember) {
-      localStorage.setItem('dy_session_user', loggedInUser.id);
-      localStorage.setItem('dy_saved_user', JSON.stringify(loggedInUser));
-      sessionStorage.removeItem('dy_session_user');
-    } else {
-      sessionStorage.setItem('dy_session_user', loggedInUser.id);
-      sessionStorage.setItem('dy_saved_user', JSON.stringify(loggedInUser));
-      localStorage.removeItem('dy_session_user');
-    }
-
+    db.setSession(loggedInUser.id, remember); // 根据用户选择保存会话
     if (loggedInUser.role === UserRole.ADMIN) {
       setCurrentView(ViewState.ADMIN_DASHBOARD);
     } else {
@@ -86,11 +90,7 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     setUser(null);
-    // 清除会话
-    localStorage.removeItem('dy_session_user');
-    localStorage.removeItem('dy_saved_user');
-    sessionStorage.removeItem('dy_session_user');
-    sessionStorage.removeItem('dy_saved_user');
+    db.clearSession(); // 清除会话
     setCurrentView(ViewState.HOME);
   };
 
@@ -144,6 +144,21 @@ const App: React.FC = () => {
             onLogout={handleLogout} 
           />
         );
+      case ViewState.COLLECTION_CRM:
+        return <CollectionHelper />;
+      // LAW_EYE_CAMERA REMOVED
+      case ViewState.RENOVATION_CHECK:
+        return <RenovationCheck />;
+      case ViewState.SCRIPT_KIT:
+        return <ScriptKit />;
+      case ViewState.EMERGENCY_SOP:
+        return <EmergencySOP />;
+      case ViewState.LAWYER_VIDEO:
+        return <LawyerVideo />;
+      case ViewState.RIGHTS_CENTER:
+        return <RightsCenter setCurrentView={setCurrentView} />;
+      case ViewState.LEGAL_HEALTH_CHECK:
+        return <LegalHealthCheck setCurrentView={setCurrentView} />;
       default:
         return <Home setCurrentView={setCurrentView} />;
     }

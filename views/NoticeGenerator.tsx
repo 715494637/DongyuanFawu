@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { FileEdit, Share2, Copy, Check, Info, Clock, MapPin, Zap, Trash2, ChevronRight, PlusCircle } from 'lucide-react';
+import { FileEdit, Share2, Copy, Check, Info, Clock, MapPin, Zap, Trash2, ChevronRight, PlusCircle, AlertTriangle } from 'lucide-react';
 
 interface FieldSpec {
   name: string;
@@ -18,6 +18,18 @@ interface Template {
 }
 
 const TEMPLATES: Template[] = [
+  {
+    id: 'crisis',
+    title: '危机公关(投诉/事故)',
+    fields: [
+      { name: '事件类型', icon: AlertTriangle, placeholder: '如：小区停水未提前通知', suggestions: ['地下车库车辆剐蹭', '电梯故障困人', '临时停电'] },
+      { name: '处理措施', icon: FileEdit, placeholder: '如：已调集送水车', suggestions: ['已联系维保单位抢修', '已报警并配合调查', '已启动应急预案'] },
+      { name: '承诺时间', icon: Clock, placeholder: '如：今晚20:00前恢复', type: 'text' }
+    ],
+    render: (f: any) => {
+        return `【关于${f['事件类型'] || '____'}的情况通报】\n\n尊敬的业主：\n    针对今日发生的${f['事件类型'] || '____'}一事，物业服务中心深表歉意。事发后，我司高度重视，立即启动应急响应机制。\n    目前，${f['处理措施'] || '____'}。我们预计将于${f['承诺时间'] || '____'}解决该问题。\n    后续进展我们将第一时间在群内通报。感谢您的理解与监督。\n\n东元物业服务中心\n日期：[当前日期]`;
+    }
+  },
   {
     id: 'outage',
     title: '停水/停电通知',
@@ -63,7 +75,6 @@ const NoticeGenerator: React.FC = () => {
 
   const handleCopy = () => {
     const text = resultText;
-    // Fallback copy method for non-secure contexts
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(() => setCopied(true));
     } else {

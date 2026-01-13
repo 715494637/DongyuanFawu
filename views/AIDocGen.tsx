@@ -2,13 +2,15 @@
 import React, { useState } from 'react';
 import { Sparkles, Copy, Check, Send, Bot, X, RefreshCw } from 'lucide-react';
 import { sendMessageToAI } from '../services/geminiService';
+import ConsultationModal from '../components/ConsultationModal';
 
 const AIDocGen: React.FC = () => {
   const [prompt, setPrompt] = useState('');
   const [result, setResult] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
-  
+  const [showConsult, setShowConsult] = useState(false);
+
   const generate = async () => {
     if (!prompt.trim() || isGenerating) return;
     setIsGenerating(true);
@@ -121,10 +123,17 @@ const AIDocGen: React.FC = () => {
              <p className="text-[10px] text-gray-400 font-medium px-6">
                本文档由智能系统生成，未经人工复核，仅作内部草拟使用。
              </p>
+             <button 
+               onClick={() => setShowConsult(true)}
+               className="text-[10px] text-indigo-600 font-bold underline hover:text-indigo-700"
+             >
+               一键咨询人工律师复核
+             </button>
           </div>
         </div>
       )}
 
+      <ConsultationModal isOpen={showConsult} onClose={() => setShowConsult(false)} />
     </div>
   );
 };

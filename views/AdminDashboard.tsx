@@ -1,1475 +1,779 @@
 
-import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
-import {
-  LayoutDashboard, Users, BookOpen, BrainCircuit,
-  Plus, Trash2, ShieldCheck, UserPlus,
-  Edit3, X, ListFilter, Camera, Scale, Save, Image as ImageIcon, Upload, Headphones, Settings, MonitorPlay, Building, Smartphone, Check, UserCheck, XCircle, MessageSquare
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  LayoutDashboard, Users, BookOpen, BrainCircuit, 
+  Plus, Trash2, ShieldCheck, UserPlus, 
+  Edit3, X, Camera, Scale, Save, Image as ImageIcon, Headphones, Settings, Building, Smartphone, Check, UserCheck, Crown, Upload, TrendingUp,
+  FileText, MessageSquare, AlertTriangle, ClipboardList, Star, Activity, Inbox, ArrowRight, PhoneCall, BarChart2, Calendar
 } from 'lucide-react';
-import { api } from '../services/apiService';
-import { imageUploadService } from '../services/imageUploadService';
-import { DocumentItem, RiskScenario, User, UserRole, EvidenceGroup, LawArticle, CustomPosterTemplate, ContactQRCode, SystemConfig } from '../types';
-
-// Memoized 子组件优化渲染性能
-const LoadingIndicator = memo(() => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-    <div className="bg-[#12151c] p-8 rounded-3xl border border-slate-800 flex flex-col items-center gap-4 shadow-2xl">
-      <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent"></div>
-      <div className="text-white font-bold">加载管理数据中...</div>
-      <div className="text-xs text-slate-500">请稍候，正在获取系统配置</div>
-    </div>
-  </div>
-));
-
-const Sidebar = memo(({ activeTab, onLogout }: { activeTab: string; onLogout: () => void }) => {
-  const menuItems = [
-    { id: 'kb', icon: BrainCircuit, label: 'AI 知识引擎', desc: '训练语料与提示词配置' },
-    { id: 'config', icon: Settings, label: '系统外观配置', desc: '开屏、登录与全局设置' },
-    { id: 'users', icon: Users, label: '员工账号体系', desc: '审批注册与权限管理' },
-    { id: 'companies', icon: Building, label: '物业公司管理', desc: '企业主体与组织架构' },
-    { id: 'docs', icon: BookOpen, label: '文书模版中心', desc: '合同/函件内容维护' },
-    { id: 'risk', icon: LayoutDashboard, label: '合规自查表', desc: '风险场景与检查项' },
-    { id: 'evidence', icon: Camera, label: '取证清单配置', desc: '标准证据闭环维护' },
-    { id: 'laws', icon: Scale, label: '民法典数据库', desc: '法律条文更新' },
-    { id: 'posters', icon: ImageIcon, label: '海报模板配置', desc: '上传自定义背景图' },
-    { id: 'contact', icon: Headphones, label: '咨询通道配置', desc: '企业微信二维码管理' },
-  ];
-
-  return (
-    <div className="w-80 bg-[#12151c] border-r border-slate-800 flex flex-col shadow-2xl">
-      <div className="p-8 border-b border-slate-800 flex items-center gap-3">
-        <div className="bg-orange-500 p-2 rounded-xl"><ShieldCheck className="text-white" size={24} /></div>
-        <div><h1 className="text-lg font-black text-white">东元后台</h1><p className="text-[8px] text-orange-500 uppercase font-bold tracking-widest">Legal OS v4.1</p></div>
-      </div>
-
-      <nav className="flex-1 p-6 space-y-2">
-        {menuItems.map(item => (
-          <button key={item.id} onClick={() => {/* setActiveTab will be handled by parent */}} className={`w-full text-left p-4 rounded-2xl border transition-all ${activeTab === item.id ? 'bg-orange-500/10 border-orange-500/40 text-white' : 'border-transparent hover:bg-white/5 text-slate-500'}`}>
-            <div className="flex items-center gap-4">
-              <item.icon size={20} className={activeTab === item.id ? 'text-orange-400' : ''} />
-              <div><div className="font-bold text-sm">{item.label}</div><div className="text-[9px] opacity-40">{item.desc}</div></div>
-            </div>
-          </button>
-        ))}
-      </nav>
-
-      <div className="p-6"><button onClick={onLogout} className="w-full py-4 bg-red-500/10 text-red-500 rounded-2xl font-bold text-xs">退出后台管理</button></div>
-    </div>
-  );
-});
+import { db } from '../services/dbService';
+import { DocumentItem, RiskScenario, User, UserRole, EvidenceGroup, LawArticle, CustomPosterTemplate, ContactQRCode, SystemConfig, RightsConfig, EnterpriseStats, VipLevelConfig, ScriptScenario, EmergencySOP, SpecialProject, ServiceRequest, UsageLog } from '../types';
 
 const AdminDashboard: React.FC<{onLogout: () => void}> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'kb' | 'docs' | 'risk' | 'evidence' | 'laws' | 'users' | 'companies' | 'posters' | 'contact' | 'config'>('kb');
-
-  // 获取token的辅助函数
-  const getToken = () => {
-    return localStorage.getItem('token') || sessionStorage.getItem('token');
-  };
-
-  // 统一的错误处理包装器
-  const handleApiCall = async (apiCall: () => Promise<any>, successMessage?: string) => {
-    try {
-      const result = await apiCall();
-      if (successMessage) {
-        alert(successMessage);
-      }
-      return result;
-    } catch (error: any) {
-      if (error.isAuthError) {
-        alert('登录已过期，请重新登录');
-        onLogout();
-      } else {
-        throw error; // 重新抛出非认证错误，让具体函数处理
-      }
-    }
-  };
+  const [activeTab, setActiveTab] = useState<'stats' | 'kb' | 'docs' | 'risk' | 'evidence' | 'laws' | 'scripts' | 'sop' | 'renovation' | 'users' | 'rights' | 'resources' | 'special' | 'requests'>('stats');
   
   // Data States
   const [kbText, setKbText] = useState('');
+  const [healthCheckPrompt, setHealthCheckPrompt] = useState('');
   const [docs, setDocs] = useState<DocumentItem[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
   const [riskScenarios, setRiskScenarios] = useState<RiskScenario[]>([]);
   const [evidenceList, setEvidenceList] = useState<EvidenceGroup[]>([]);
   const [lawArticles, setLawArticles] = useState<LawArticle[]>([]);
+  const [scripts, setScripts] = useState<ScriptScenario[]>([]);
+  const [sops, setSops] = useState<EmergencySOP[]>([]);
+  const [renovationItems, setRenovationItems] = useState<string[]>([]);
+  const [specialProjects, setSpecialProjects] = useState<SpecialProject[]>([]);
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
+  const [usageLogs, setUsageLogs] = useState<UsageLog[]>([]);
+
   const [users, setUsers] = useState<User[]>([]);
   const [enterprises, setEnterprises] = useState<string[]>([]); 
   const [customPosters, setCustomPosters] = useState<CustomPosterTemplate[]>([]);
   const [contactQRs, setContactQRs] = useState<ContactQRCode[]>([]);
-  const [systemConfig, setSystemConfig] = useState<SystemConfig>({ enablePhoneLogin: true, welcomeMessage: '' });
+  const [systemConfig, setSystemConfig] = useState<SystemConfig>({ enablePhoneLogin: true, enableSplashScreen: true, welcomeMessage: '' });
+  
+  // New States for Stats & VIP Levels
+  const [targetEnterprise, setTargetEnterprise] = useState<string>(''); // Currently selected enterprise for stats editing
+  const [entStats, setEntStats] = useState<EnterpriseStats>({ totalRecoveredAmount: 0, totalEntrustedAmount: 0, entrustedCount: 0 });
+  const [vipLevels, setVipLevels] = useState<VipLevelConfig[]>([]);
 
-  // 临时配置状态（用于编辑，未保存）
-  const [tempConfig, setTempConfig] = useState<SystemConfig>({ enablePhoneLogin: true, welcomeMessage: '' });
+  // Stats Filtering
+  const [statsPeriod, setStatsPeriod] = useState<'month' | 'quarter' | 'year'>('month');
 
   // Config States
   const [splashImage, setSplashImage] = useState<string | null>(null);
   const splashInputRef = useRef<HTMLInputElement>(null);
-
-  // Loading state
-  const [isLoading, setIsLoading] = useState(true);
   
   // Modals / Editing States
-  const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
-  const [editingRisk, setEditingRisk] = useState<RiskScenario | null>(null);
-  const [editingEvidence, setEditingEvidence] = useState<EvidenceGroup | null>(null);
-  const [editingLaw, setEditingLaw] = useState<LawArticle | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [showPosterModal, setShowPosterModal] = useState(false);
+  const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
+  const [editingLaw, setEditingLaw] = useState<LawArticle | null>(null);
+  const [editingRenovationItem, setEditingRenovationItem] = useState<{idx: number, text: string} | null>(null);
+  const [editingProject, setEditingProject] = useState<SpecialProject | null>(null);
   
-  // Companies Modal
-  const [showCompanyModal, setShowCompanyModal] = useState(false);
+  // New Editors for Modules
+  const [editingRisk, setEditingRisk] = useState<{id: string, title: string, questions: string} | null>(null);
+  const [editingEvidence, setEditingEvidence] = useState<{id: string, title: string, items: string} | null>(null);
+  const [editingScript, setEditingScript] = useState<ScriptScenario | null>(null);
+  const [editingSOP, setEditingSOP] = useState<{id: string, title: string, level: 'HIGH' | 'MEDIUM', steps: string, tips: string} | null>(null);
+
   const [newCompanyName, setNewCompanyName] = useState('');
-
-  // Poster Upload State
-  const [newPosterName, setNewPosterName] = useState('');
-  const [newPosterImage, setNewPosterImage] = useState<string | null>(null);
-  const posterFileRef = useRef<HTMLInputElement>(null);
-
-  // Contact QR Upload State
-  const [showQRModal, setShowQRModal] = useState(false);
-  const [newQRName, setNewQRName] = useState('');
-  const [newQRImage, setNewQRImage] = useState<string | null>(null);
-  const qrFileRef = useRef<HTMLInputElement>(null);
   
-  // Category Manager State
-  const [showCatManager, setShowCatManager] = useState(false);
-  const [newCatName, setNewCatName] = useState('');
+  // Helper refs
+  const posterFileRef = useRef<HTMLInputElement>(null);
+  const qrFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     refreshData();
   }, []);
 
-  // 使用 useMemo 优化计算
-  const memoizedData = useMemo(() => ({
-    pendingUsers: users.filter(u => u.approval_status === 'PENDING'),
-    approvedUsers: users.filter(u => u.approval_status !== 'PENDING'),
-    docCategories: categories,
-    enterprisesWithUserCount: enterprises.map(ent => ({
-      name: ent,
-      userCount: users.filter(u => u.enterprise_name === ent).length
-    }))
-  }), [users, categories, enterprises]);
-
-  const refreshData = async () => {
-    setIsLoading(true);
-    try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-
-      // 并行获取所有数据
-      const [
-        configData,
-        docsData,
-        risksData,
-        evidenceData,
-        lawsData,
-        usersData,
-        enterprisesData,
-        postersData,
-        qrData
-      ] = await Promise.all([
-        api.getConfig(),
-        api.getDocuments(),
-        api.getRisks(),
-        api.getEvidence(),
-        api.getCivilCode(),
-        api.getUsers(token!),
-        api.getEnterprises(),
-        api.getPosters(),
-        api.getContactQR()
-      ]);
-
-      // 使用 requestAnimationFrame 批量更新状态，避免阻塞渲染
-      requestAnimationFrame(() => {
-        // 批量更新配置相关状态
-        const configUpdates = {
-          enable_phone_login: configData.enable_phone_login,
-          welcome_message: configData.welcome_message
-        };
-
-        setSystemConfig(configUpdates);
-        setTempConfig({
-          enablePhoneLogin: configData.enable_phone_login,
-          welcomeMessage: configData.welcome_message
-        });
-        setKbText(configData.ai_knowledge_base || '');
-        setSplashImage(configData.splash_image || null);
-
-        // 批量更新列表数据
-        setDocs(docsData);
-        setRiskScenarios(risksData);
-        setEvidenceList(evidenceData);
-        setLawArticles(lawsData);
-        setUsers(usersData);
-        setEnterprises(enterprisesData);
-        setCustomPosters(postersData);
-        setContactQRs(qrData);
-
-        // 异步处理分类提取，避免阻塞主线程
-        setTimeout(() => {
-          const uniqueCategories = Array.from(new Set(docsData.map((doc: any) => doc.category)));
-          setCategories(['全部', ...uniqueCategories]);
-        }, 0);
-      });
-
-    } catch (error: any) {
-      console.error('加载数据失败:', error);
-
-      // 检查是否是认证错误
-      if (error.isAuthError) {
-        alert('登录已过期，请重新登录');
-        onLogout(); // 自动退出登录
-      } else {
-        alert('加载数据失败，请重新登录');
+  // When target enterprise changes, reload its specific stats
+  useEffect(() => {
+      if (targetEnterprise) {
+          const s = db.getEnterpriseStats(targetEnterprise);
+          setEntStats(s);
       }
-    } finally {
-      setIsLoading(false);
+  }, [targetEnterprise]);
+
+  const refreshData = () => {
+    setKbText(db.getAIKB());
+    setHealthCheckPrompt(db.getHealthCheckPrompt());
+    setDocs(db.getDocs());
+    setRiskScenarios(db.getCheckScenarios());
+    setEvidenceList(db.getEvidenceList());
+    setLawArticles(db.getCivilCode());
+    setScripts(db.getScripts());
+    setSops(db.getSOPs());
+    setRenovationItems(db.getRenovationChecklist());
+    setSpecialProjects(db.getSpecialProjects());
+    setServiceRequests(db.getServiceRequests());
+    setUsageLogs(db.getUsageLogs());
+
+    const allUsers = db.getUsers();
+    setUsers(allUsers);
+    
+    const ents = db.getEnterprises();
+    setEnterprises(ents);
+    
+    // Set default target enterprise for stats editing if not set
+    if (!targetEnterprise && ents.length > 0) {
+        setTargetEnterprise(ents[0]);
+    } else if (targetEnterprise) {
+        // Refresh current stats
+        const s = db.getEnterpriseStats(targetEnterprise);
+        setEntStats(s);
     }
+
+    setCustomPosters(db.getCustomPosters());
+    setContactQRs(db.getContactQRCodes());
+    setSplashImage(db.getSplashImage());
+    setSystemConfig(db.getSystemConfig());
+    
+    setVipLevels(db.getVipLevels());
   };
 
-  const saveKB = async () => {
-    try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      await api.updateConfig({ ai_knowledge_base: kbText }, token!);
-      alert('AI 知识库与系统指令已同步成功。');
-    } catch (error: any) {
-      if (error.isAuthError) {
-        alert('登录已过期，请重新登录');
-        onLogout();
-      } else {
-        alert('保存失败，请重试');
-      }
-    }
-  };
+  // --- Statistics Logic ---
+  const getAggregatedStats = () => {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      const currentQuarter = Math.floor(currentMonth / 3);
 
-  const handleConfigChange = (newConfig: Partial<SystemConfig>) => {
-    // 只更新临时状态，不发送请求
-    setTempConfig(prev => ({ ...prev, ...newConfig }));
-  };
-
-  // 保存系统配置
-  const saveSystemConfig = async () => {
-    try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const payload = {
-        enable_phone_login: tempConfig.enablePhoneLogin,
-        welcome_message: tempConfig.welcomeMessage
-      };
-      await api.updateConfig(payload, token!);
-      setSystemConfig({
-        enable_phone_login: tempConfig.enablePhoneLogin,
-        welcome_message: tempConfig.welcomeMessage
-      });
-      alert('系统配置保存成功！');
-    } catch (error: any) {
-      if (error.isAuthError) {
-        alert('登录已过期，请重新登录');
-        onLogout();
-      } else {
-        alert('配置保存失败，请重试');
-      }
-    }
-  };
-
-  // --- Splash Config Logic ---
-  const handleSplashUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const base64 = ev.target?.result as string;
-        try {
-          const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-          await api.uploadSplashImage({ splash_image: base64 }, token!);
-          setSplashImage(base64);
-          alert('开屏图已更新，下次启动应用时生效。');
-        } catch (error: any) {
-          console.error('Failed to upload splash image:', error);
-          if (error.isAuthError) {
-            alert('登录已过期，请重新登录');
-            onLogout();
+      const filteredLogs = usageLogs.filter(log => {
+          const logDate = new Date(log.timestamp);
+          if (statsPeriod === 'month') {
+              return logDate.getMonth() === currentMonth && logDate.getFullYear() === currentYear;
+          } else if (statsPeriod === 'quarter') {
+              return Math.floor(logDate.getMonth() / 3) === currentQuarter && logDate.getFullYear() === currentYear;
           } else {
-            alert('上传开屏图失败，请重试。');
+              return logDate.getFullYear() === currentYear;
           }
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleResetSplash = async () => {
-    if (confirm('确定要恢复默认的品牌开屏动画吗？')) {
-      try {
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        await api.deleteSplashImage(token!);
-        setSplashImage(null);
-        alert('开屏图已恢复默认。');
-      } catch (error: any) {
-        console.error('Failed to delete splash image:', error);
-        if (error.isAuthError) {
-          alert('登录已过期，请重新登录');
-          onLogout();
-        } else {
-          alert('恢复默认开屏图失败，请重试。');
-        }
-      }
-    }
-  };
-
-  // --- User Approval Logic ---
-  const handleApproveUser = async (userId: string) => {
-    if (confirm('确定批准该用户注册申请吗？')) {
-      await handleApiCall(async () => {
-        const token = getToken();
-        if (!token) throw new Error('请先登录');
-        await api.approveUser(userId, token);
-        refreshData();
-      }, '用户审批成功').catch(() => {
-        alert('审批失败，请重试');
       });
-    }
-  };
 
-  const handleRejectUser = async (userId: string) => {
-    if (confirm('确定拒绝该用户注册申请吗？')) {
-      await handleApiCall(async () => {
-        const token = getToken();
-        if (!token) throw new Error('请先登录');
-        await api.deleteUser(userId, token);
-        refreshData();
-      }, '用户已拒绝').catch(() => {
-        alert('删除用户失败，请重试');
+      // Aggregate: Map<EnterpriseName, Map<FeatureName, Count>>
+      const aggregation: Record<string, Record<string, number>> = {};
+      const allFeatures = new Set<string>();
+
+      filteredLogs.forEach(log => {
+          if (!aggregation[log.enterpriseName]) {
+              aggregation[log.enterpriseName] = {};
+          }
+          if (!aggregation[log.enterpriseName][log.featureName]) {
+              aggregation[log.enterpriseName][log.featureName] = 0;
+          }
+          aggregation[log.enterpriseName][log.featureName]++;
+          allFeatures.add(log.featureName);
       });
-    }
+
+      // Ensure 'East Capital Demo' or manual entries also appear if they have logs
+      return { aggregation, features: Array.from(allFeatures) };
   };
 
-  // ... (保留原有的 handleSaveDoc, handleAddCategory, handleAddCompany, etc. 逻辑不变，为了节省篇幅略去重复函数，仅需确保逻辑存在)
-  // --- Document Logic ---
-  const handleSaveDoc = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingDoc) return;
-
-    await handleApiCall(async () => {
-      const token = getToken();
-      if (!token) throw new Error('请先登录');
-
-      const docData = {
-        title: editingDoc.title,
-        category: editingDoc.category,
-        description: editingDoc.description,
-        content: editingDoc.content
-      };
-
-      if (editingDoc.id) {
-        // 更新现有文档
-        await api.updateDocument(editingDoc.id, docData, token);
-      } else {
-        // 创建新文档
-        await api.createDocument(docData, token);
-      }
-
-      refreshData();
-      setEditingDoc(null);
-    }, '文档保存成功').catch((error) => {
-      console.error('保存文档失败:', error);
-      alert('保存文档失败，请重试');
-    });
-  };
-
-  const handleAddCategory = () => {
-    if (!newCatName.trim()) return;
-    if (categories.includes(newCatName.trim())) {
-      alert('分类已存在');
-      return;
-    }
-    const updated = [...categories, newCatName.trim()];
-    // 注意：后端目前没有_categories独立的API，分类存储在文档中
-    // 这里先在前端维护，后续可以考虑添加分类管理API
-    setCategories(updated);
-    setNewCatName('');
-  };
-
-  const handleDeleteCategory = (cat: string) => {
-    if (cat === '全部') {
-      alert('无法删除"全部"分类');
-      return;
-    }
-    if (confirm(`确定删除分类"${cat}"吗？`)) {
-      const updated = categories.filter(c => c !== cat);
-      // 注意：后端目前没有_categories独立的API，分类存储在文档中
-      // 这里先在前端维护，后续可以考虑添加分类管理API
-      setCategories(updated);
-    }
-  };
-
-  // --- Enterprise Logic ---
-  const handleAddCompany = async () => {
-    if (!newCompanyName.trim()) return;
-    if (enterprises.includes(newCompanyName.trim())) {
-      alert('该公司名称已存在');
-      return;
-    }
-
-    await handleApiCall(async () => {
-      const token = getToken();
-      if (!token) throw new Error('请先登录');
-
-      await api.createEnterprise(newCompanyName.trim(), token);
-      refreshData();
-      setNewCompanyName('');
-      setShowCompanyModal(false);
-    }, '公司添加成功').catch((error) => {
-      console.error('添加公司失败:', error);
-      alert('添加公司失败，请重试');
-    });
-  };
-
-  const handleDeleteCompany = async (name: string) => {
-    if (confirm(`确定删除物业公司"${name}"吗？\n删除后，隶属于该公司的员工账号可能显示异常。`)) {
-      await handleApiCall(async () => {
-        const token = getToken();
-        if (!token) throw new Error('请先登录');
-
-        await api.deleteEnterprise(name, token);
-        refreshData();
-      }, '公司删除成功').catch((error) => {
-        console.error('删除公司失败:', error);
-        alert('删除公司失败，请重试');
-      });
-    }
-  };
-
-  // --- Risk Logic ---
-  const handleSaveRisk = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingRisk) return;
-
-    await handleApiCall(async () => {
-      const token = getToken();
-      if (!token) throw new Error('请先登录');
-
-      const riskData = {
-        title: editingRisk.title,
-        risk_level: editingRisk.risk_level,
-        content: editingRisk.content,
-        questions: editingRisk.questions || []
-      };
-
-      if (editingRisk.id) {
-        // 更新现有风险场景
-        await api.updateRisk(editingRisk.id, riskData, token);
-      } else {
-        // 创建新风险场景
-        await api.createRisk(riskData, token);
-      }
-
-      refreshData();
-      setEditingRisk(null);
-    }, '风险场景保存成功').catch((error) => {
-      console.error('保存风险场景失败:', error);
-      alert('保存风险场景失败，请重试');
-    });
-  };
-
-  // --- Evidence Logic ---
-  const handleSaveEvidence = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingEvidence) return;
-
-    await handleApiCall(async () => {
-      const token = getToken();
-      if (!token) throw new Error('请先登录');
-
-      const evidenceData = {
-        title: editingEvidence.title,
-        items: editingEvidence.items || []
-      };
-
-      if (editingEvidence.id) {
-        // 更新现有证据清单
-        await api.updateEvidence(editingEvidence.id, evidenceData, token);
-      } else {
-        // 创建新证据清单
-        await api.createEvidence(evidenceData, token);
-      }
-
-      refreshData();
-      setEditingEvidence(null);
-    }, '证据清单保存成功').catch((error) => {
-      console.error('保存证据清单失败:', error);
-      alert('保存证据清单失败，请重试');
-    });
-  };
-
-  // --- Law Logic ---
-  const handleSaveLaw = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingLaw) return;
-
-    await handleApiCall(async () => {
-      const token = getToken();
-      if (!token) throw new Error('请先登录');
-
-      const lawData = {
-        title: editingLaw.title,
-        content: editingLaw.content
-      };
-
-      if (editingLaw.id) {
-        // 更新现有民法典条文
-        await api.updateCivilCode(editingLaw.id, lawData, token);
-      } else {
-        // 创建新民法典条文
-        await api.createCivilCode(lawData, token);
-      }
-
-      refreshData();
-      setEditingLaw(null);
-    }, '民法典条文保存成功').catch((error) => {
-      console.error('保存民法典条文失败:', error);
-      alert('保存民法典条文失败，请重试');
-    });
-  };
-
-  // --- User Logic ---
-  const handleSaveUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingUser) return;
-
-    if (editingUser.role === UserRole.USER && !editingUser.enterprise_name) {
-      alert('请选择该员工所属的物业公司');
-      return;
-    }
-
-    await handleApiCall(async () => {
-      const token = getToken();
-      if (!token) throw new Error('请先登录');
-
-      const userData = {
-        username: editingUser.username,
-        password: editingUser.password,
-        phone_number: editingUser.phone_number,
-        enterprise_name: editingUser.enterprise_name,
-        role: editingUser.role,
-        approval_status: editingUser.approval_status,
-        is_certified: editingUser.is_certified
-      };
-
-      if (editingUser.id) {
-        // 更新现有用户
-        await api.updateUser(editingUser.id, userData, token);
-      } else {
-        // 创建新用户（管理员直接创建）
-        await api.createUserByAdmin(userData, token);
-      }
-
-      refreshData();
-      setEditingUser(null);
-    }, '用户保存成功').catch((error: any) => {
-      console.error('保存用户失败:', error);
-      const errorMsg = error.detail || error.message || '保存用户失败，请重试';
-      alert(errorMsg);
-    });
+  const saveKB = () => { 
+      db.saveAIKB(kbText); 
+      db.saveHealthCheckPrompt(healthCheckPrompt);
+      alert('AI 知识库及指令配置已更新'); 
   };
   
-  // --- Poster Logic ---
-  const handlePosterImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setNewPosterImage(ev.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+  const handleConfigChange = (newConfig: Partial<SystemConfig>) => { 
+      const updated = { ...systemConfig, ...newConfig }; 
+      setSystemConfig(updated); 
+      db.saveSystemConfig(updated); 
   };
-
-  const handleSavePoster = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPosterName.trim() || !newPosterImage) return;
-
-    await handleApiCall(async () => {
-      const token = getToken();
-      if (!token) throw new Error('请先登录');
-
-      // 先上传图片到 ImageBB
-      const imageUrl = await imageUploadService.uploadImage(newPosterImage);
-
-      const posterData = {
-        name: newPosterName.trim(),
-        image_url: imageUrl
-      };
-
-      await api.createPoster(posterData, token);
-
-      refreshData();
-      setNewPosterName('');
-      setNewPosterImage(null);
-      setShowPosterModal(false);
-    }, '海报模板保存成功').catch((error) => {
-      console.error('保存海报失败:', error);
-      alert('保存海报失败，请重试');
-    });
-  };
-
-  // --- QR Code Logic ---
-  const handleQRImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setNewQRImage(ev.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleSaveQR = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newQRName.trim() || !newQRImage) return;
-
-    await handleApiCall(async () => {
-      const token = getToken();
-      if (!token) throw new Error('请先登录');
-
-      // 先上传图片到 ImageBB
-      const imageUrl = await imageUploadService.uploadImage(newQRImage);
-
-      const qrData = {
-        name: newQRName.trim(),
-        image_url: imageUrl
-      };
-
-      await api.createContactQR(qrData, token);
-
-      refreshData();
-      setNewQRName('');
-      setNewQRImage(null);
-      setShowQRModal(false);
-    }, '二维码保存成功').catch((error) => {
-      console.error('保存二维码失败:', error);
-      alert('保存二维码失败，请重试');
-    });
-  };
-
-  const deleteItem = async (type: 'doc'|'risk'|'evidence'|'law'|'user'|'poster'|'qr', id: string) => {
-    if (!confirm('确定删除此项吗？')) return;
-
-    await handleApiCall(async () => {
-      const token = getToken();
-      if (!token) throw new Error('请先登录');
-
-      if (type === 'doc') {
-        await api.deleteDocument(id, token);
-      } else if (type === 'risk') {
-        await api.deleteRisk(id, token);
-      } else if (type === 'evidence') {
-        await api.deleteEvidence(id, token);
-      } else if (type === 'law') {
-        await api.deleteCivilCode(id, token);
-      } else if (type === 'user') {
-        await api.deleteUser(id, token);
-      } else if (type === 'poster') {
-        await api.deletePoster(id, token);
-      } else if (type === 'qr') {
-        await api.deleteContactQR(id, token);
+  
+  const handleStatChange = (key: keyof EnterpriseStats, val: number) => {
+      const updated = { ...entStats, [key]: val };
+      setEntStats(updated);
+      // Auto-save to DB for the selected enterprise
+      if (targetEnterprise) {
+          db.saveEnterpriseStats(updated, targetEnterprise);
       }
-
-      refreshData();
-    }, '删除成功').catch((error) => {
-      console.error('删除失败:', error);
-      alert('删除失败，请重试');
-    });
   };
+
+  const handleLevelUpdate = (id: string, field: string, val: any) => {
+      const newLevels = vipLevels.map(l => l.id === id ? { ...l, [field]: val } : l);
+      setVipLevels(newLevels);
+      db.saveVipLevels(newLevels);
+  };
+
+  const getCurrentVipInfo = () => {
+      const sortedLevels = [...vipLevels].sort((a, b) => a.thresholdAmount - b.thresholdAmount);
+      let current = sortedLevels[0];
+      let next = null;
+
+      for (let i = 0; i < sortedLevels.length; i++) {
+          if (entStats.totalEntrustedAmount >= sortedLevels[i].thresholdAmount) {
+              current = sortedLevels[i];
+          } else {
+              next = sortedLevels[i];
+              break;
+          }
+      }
+      return { current, next };
+  };
+
+  const handleSplashUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => { 
+          const base64 = ev.target?.result as string;
+          db.saveSplashImage(base64); 
+          setSplashImage(base64); 
+          alert('开屏图已更新'); 
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+  const handleResetSplash = () => { if (confirm('确认恢复默认开屏？')) { db.saveSplashImage(null); setSplashImage(null); } };
+  
+  const handleApproveUser = (id: string) => { db.updateUser(id, { approvalStatus: 'APPROVED', isCertified: true }); refreshData(); };
+  const handleRejectUser = (id: string) => { db.updateUser(id, { approvalStatus: 'REJECTED', isCertified: false }); refreshData(); };
+  
+  const handleAddCompany = () => { if(!newCompanyName.trim())return; db.addEnterprise(newCompanyName.trim()); refreshData(); setNewCompanyName(''); };
+  const handleDeleteCompany = (n:string) => { if(confirm('确定删除该物业公司？')) {db.deleteEnterprise(n); refreshData();} };
+  
+  const handleSaveUser = (e:React.FormEvent) => { 
+      e.preventDefault(); 
+      if(!editingUser) return; 
+      if(editingUser.role !== UserRole.ADMIN && !editingUser.enterpriseName) {alert('请选择所属公司'); return;} 
+      if (!editingUser.quota) editingUser.quota = { lawyerLetters: 0, consultations: 0 };
+      
+      const all=db.getUsers(); 
+      const idx=all.findIndex(x=>x.id===editingUser.id); 
+      if(idx>-1)all[idx]=editingUser; else all.push(editingUser); 
+      db.saveUsers(all); refreshData(); setEditingUser(null); 
+  };
+
+  const handleProcessRequest = (id: string, status: 'PROCESSED' | 'REJECTED') => {
+      db.updateServiceRequest(id, { status });
+      refreshData();
+  };
+
+  const handlePosterImageUpload = (e:any) => { 
+      const f=e.target.files?.[0]; 
+      if(f){ const r=new FileReader(); r.onload=(ev)=>{
+          db.addCustomPoster({id:Date.now().toString(), name: '自定义海报', imageBase64: ev.target?.result as string, createdAt:Date.now()});
+          refreshData();
+      }; r.readAsDataURL(f);} 
+  };
+  
+  const handleQRImageUpload = (e:any) => { 
+      const f=e.target.files?.[0]; 
+      if(f){ const r=new FileReader(); r.onload=(ev)=>{
+           db.addContactQRCode({id:Date.now().toString(), name: '新顾问', imageBase64: ev.target?.result as string, createdAt:Date.now()});
+           refreshData();
+      }; r.readAsDataURL(f);} 
+  };
+
+  const deleteItem = (t:string,id:string) => { 
+      if(!confirm('确定删除该项？'))return; 
+      if(t==='user')db.deleteUser(id); 
+      if(t==='poster')db.deleteCustomPoster(id); 
+      if(t==='qr')db.deleteContactQRCode(id); 
+      if(t==='doc') { const n = docs.filter(d=>d.id!==id); db.saveDocs(n); setDocs(n); }
+      if(t==='law') { const n = lawArticles.filter(d=>d.id!==id); db.saveCivilCode(n); setLawArticles(n); }
+      if(t==='project') { const n = specialProjects.filter(d=>d.id!==id); db.saveSpecialProjects(n); setSpecialProjects(n); }
+      if(t==='risk') { const n = riskScenarios.filter(r=>r.id!==id); db.saveCheckScenarios(n); setRiskScenarios(n); }
+      if(t==='evidence') { const n = evidenceList.filter(e=>e.id!==id); db.saveEvidenceList(n); setEvidenceList(n); }
+      if(t==='script') { const n = scripts.filter(s=>s.id!==id); db.saveScripts(n); setScripts(n); }
+      if(t==='sop') { const n = sops.filter(s=>s.id!==id); db.saveSOPs(n); setSops(n); }
+      refreshData(); 
+  };
+
+  const handleSaveDoc = (e: React.FormEvent) => { e.preventDefault(); if (!editingDoc) return; const n = [...docs]; const idx = n.findIndex(d => d.id === editingDoc.id); if (idx > -1) n[idx] = editingDoc; else n.push(editingDoc); db.saveDocs(n); setDocs(n); setEditingDoc(null); };
+  const handleSaveLaw = (e: React.FormEvent) => { e.preventDefault(); if (!editingLaw) return; const n = [...lawArticles]; const idx = n.findIndex(d => d.id === editingLaw.id); if (idx > -1) n[idx] = editingLaw; else n.push(editingLaw); db.saveCivilCode(n); setLawArticles(n); setEditingLaw(null); };
+  const handleSaveProject = (e: React.FormEvent) => { e.preventDefault(); if (!editingProject) return; const n = [...specialProjects]; const idx = n.findIndex(d => d.id === editingProject.id); if (idx > -1) n[idx] = editingProject; else n.push(editingProject); db.saveSpecialProjects(n); setSpecialProjects(n); setEditingProject(null); };
+  const handleSaveRisk = (e: React.FormEvent) => { e.preventDefault(); if (!editingRisk) return; const qs = editingRisk.questions.split('\n').filter(l => l.trim()); const nRisk = {id:editingRisk.id, title:editingRisk.title, questions:qs}; const n = [...riskScenarios]; const idx = n.findIndex(x => x.id === editingRisk.id); if (idx > -1) n[idx] = nRisk; else n.push(nRisk); db.saveCheckScenarios(n); setRiskScenarios(n); setEditingRisk(null); };
+  const handleSaveEvidence = (e: React.FormEvent) => { e.preventDefault(); if (!editingEvidence) return; const is = editingEvidence.items.split('\n').filter(l => l.trim()); const nEv = {id:editingEvidence.id, title:editingEvidence.title, items:is}; const n = [...evidenceList]; const idx = n.findIndex(x => x.id === editingEvidence.id); if (idx > -1) n[idx] = nEv; else n.push(nEv); db.saveEvidenceList(n); setEvidenceList(n); setEditingEvidence(null); };
+  const handleSaveSOP = (e: React.FormEvent) => { e.preventDefault(); if (!editingSOP) return; const ss = editingSOP.steps.split('\n').filter(l => l.trim()); const nSop: EmergencySOP = {id:editingSOP.id, title:editingSOP.title, level:editingSOP.level as any, steps:ss, tips:editingSOP.tips}; const n = [...sops]; const idx = n.findIndex(x => x.id === editingSOP.id); if (idx > -1) n[idx] = nSop; else n.push(nSop); db.saveSOPs(n); setSops(n); setEditingSOP(null); };
+  const handleSaveScript = (e: React.FormEvent) => { e.preventDefault(); if (!editingScript) return; editingScript.steps = editingScript.steps.filter(s => s.label.trim() && s.content.trim()); const n = [...scripts]; const idx = n.findIndex(x => x.id === editingScript.id); if (idx > -1) n[idx] = editingScript; else n.push(editingScript); db.saveScripts(n); setScripts(n); setEditingScript(null); };
+
+  // Generic Simple List Manager
+  const SimpleListEditor = ({ title, items, onAdd, onDelete, renderItem }: any) => (
+      <div className="bg-[#12151c] p-6 rounded-3xl border border-slate-800">
+         <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold text-white text-lg">{title}</h3>
+            <button onClick={onAdd} className="bg-orange-500 text-white p-2 rounded-lg text-xs font-bold flex items-center gap-1"><Plus size={14}/> 添加</button>
+         </div>
+         <div className="space-y-2">
+            {items.map((item: any, idx: number) => (
+               <div key={item.id || idx} className="bg-white/5 p-4 rounded-xl border border-white/5 flex justify-between items-start">
+                   <div className="flex-1">{renderItem(item)}</div>
+                   <button onClick={() => onDelete(item.id || idx)} className="text-slate-500 hover:text-red-500 p-1"><Trash2 size={16}/></button>
+               </div>
+            ))}
+            {items.length === 0 && <div className="text-slate-500 text-xs text-center py-4">暂无数据</div>}
+         </div>
+      </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#0a0c10] text-slate-300 flex font-sans overflow-hidden">
-      {/* Sidebar - 使用 memoized 组件 */}
-      <div className="w-80 bg-[#12151c] border-r border-slate-800 flex flex-col shadow-2xl">
-        <div className="p-8 border-b border-slate-800 flex items-center gap-3">
-          <div className="bg-orange-500 p-2 rounded-xl"><ShieldCheck className="text-white" size={24} /></div>
-          <div><h1 className="text-lg font-black text-white">东元后台</h1><p className="text-[8px] text-orange-500 uppercase font-bold tracking-widest">Legal OS v4.1</p></div>
+      {/* Sidebar */}
+      <div className="w-64 bg-[#12151c] border-r border-slate-800 flex flex-col shadow-2xl shrink-0">
+        <div className="p-6 border-b border-slate-800 flex items-center gap-3">
+          <div className="bg-orange-500 p-2 rounded-xl"><ShieldCheck className="text-white" size={20} /></div>
+          <div><h1 className="text-base font-black text-white">东元后台</h1><p className="text-[8px] text-orange-100 uppercase font-bold tracking-widest">Legal OS v4.5</p></div>
         </div>
-
-        <nav className="flex-1 p-6 space-y-2">
+        
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto no-scrollbar">
           {[
-            { id: 'kb', icon: BrainCircuit, label: 'AI 知识引擎', desc: '训练语料与提示词配置' },
-            { id: 'config', icon: Settings, label: '系统外观配置', desc: '开屏、登录与全局设置' },
-            { id: 'users', icon: Users, label: '员工账号体系', desc: '审批注册与权限管理' },
-            { id: 'companies', icon: Building, label: '物业公司管理', desc: '企业主体与组织架构' },
-            { id: 'docs', icon: BookOpen, label: '文书模版中心', desc: '合同/函件内容维护' },
-            { id: 'risk', icon: LayoutDashboard, label: '合规自查表', desc: '风险场景与检查项' },
-            { id: 'evidence', icon: Camera, label: '取证清单配置', desc: '标准证据闭环维护' },
-            { id: 'laws', icon: Scale, label: '民法典数据库', desc: '法律条文更新' },
-            { id: 'posters', icon: ImageIcon, label: '海报模板配置', desc: '上传自定义背景图' },
-            { id: 'contact', icon: Headphones, label: '咨询通道配置', desc: '企业微信二维码管理' },
+            { id: 'stats', icon: BarChart2, label: '数据统计' },
+            { id: 'kb', icon: BrainCircuit, label: 'AI 知识引擎' },
+            { id: 'rights', icon: Crown, label: '权益配置' }, 
+            { id: 'requests', icon: Inbox, label: '服务申请审批' },
+            { id: 'special', icon: Star, label: '专项服务配置' },
+            { id: 'users', icon: Users, label: '员工/角色管理' },
+            { id: 'docs', icon: FileText, label: '文档中心' },
+            { id: 'risk', icon: ShieldCheck, label: '风控合规' },
+            { id: 'evidence', icon: Camera, label: '取证清单' },
+            { id: 'scripts', icon: MessageSquare, label: '催费话术' },
+            { id: 'sop', icon: AlertTriangle, label: 'SOP 预案' },
+            { id: 'laws', icon: BookOpen, label: '法规库' },
+            { id: 'renovation', icon: ClipboardList, label: '装修巡查项' },
+            { id: 'resources', icon: Settings, label: '资源与外观' },
           ].map(item => (
-            <button key={item.id} onClick={() => setActiveTab(item.id as any)} className={`w-full text-left p-4 rounded-2xl border transition-all ${activeTab === item.id ? 'bg-orange-500/10 border-orange-500/40 text-white' : 'border-transparent hover:bg-white/5 text-slate-500'}`}>
-              <div className="flex items-center gap-4">
-                <item.icon size={20} className={activeTab === item.id ? 'text-orange-400' : ''} />
-                <div><div className="font-bold text-sm">{item.label}</div><div className="text-[9px] opacity-40">{item.desc}</div></div>
+            <button key={item.id} onClick={() => setActiveTab(item.id as any)} className={`w-full text-left px-4 py-3 rounded-xl border transition-all ${activeTab === item.id ? 'bg-orange-500/10 border-orange-500/40 text-white' : 'border-transparent hover:bg-white/5 text-slate-500'}`}>
+              <div className="flex items-center gap-3">
+                <item.icon size={18} className={activeTab === item.id ? 'text-orange-400' : ''} />
+                <span className="font-bold text-xs">{item.label}</span>
+                {item.id === 'requests' && serviceRequests.some(r => r.status === 'PENDING') && (
+                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse ml-auto"></span>
+                )}
               </div>
             </button>
           ))}
         </nav>
-
-        <div className="p-6"><button onClick={onLogout} className="w-full py-4 bg-red-500/10 text-red-500 rounded-2xl font-bold text-xs">退出后台管理</button></div>
+        
+        <div className="p-4"><button onClick={onLogout} className="w-full py-3 bg-red-500/10 text-red-500 rounded-xl font-bold text-xs hover:bg-red-500 hover:text-white transition-colors">退出后台</button></div>
       </div>
 
-      <main className="flex-1 overflow-y-auto p-10 bg-[#0a0c10] no-scrollbar">
-        {/* Loading Indicator - 使用 memoized 组件 */}
-        {isLoading && <LoadingIndicator />}
+      <main className="flex-1 overflow-y-auto p-8 bg-[#0a0c10] no-scrollbar">
+        
+        {/* === TAB: Statistics (New) === */}
+        {activeTab === 'stats' && (
+            <div className="space-y-6 animate-fade-in">
+                <div className="bg-[#12151c] p-8 rounded-[2.5rem] border border-slate-800">
+                    <div className="flex justify-between items-center mb-8">
+                        <h3 className="font-black text-white text-xl flex items-center gap-2">
+                            <BarChart2 className="text-orange-500" /> 企业使用频次统计
+                        </h3>
+                        <div className="flex bg-black/40 p-1 rounded-xl border border-slate-800">
+                            <button 
+                                onClick={() => setStatsPeriod('month')}
+                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${statsPeriod === 'month' ? 'bg-orange-500 text-white' : 'text-slate-500 hover:text-white'}`}
+                            >
+                                本月
+                            </button>
+                            <button 
+                                onClick={() => setStatsPeriod('quarter')}
+                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${statsPeriod === 'quarter' ? 'bg-orange-500 text-white' : 'text-slate-500 hover:text-white'}`}
+                            >
+                                本季度
+                            </button>
+                            <button 
+                                onClick={() => setStatsPeriod('year')}
+                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${statsPeriod === 'year' ? 'bg-orange-500 text-white' : 'text-slate-500 hover:text-white'}`}
+                            >
+                                本年度
+                            </button>
+                        </div>
+                    </div>
 
-        {/* KB Tab */}
-        {activeTab === 'kb' && (
-          <div className="grid grid-cols-2 gap-8 h-full">
-            <div className="bg-[#12151c] p-8 rounded-3xl border border-slate-800 flex flex-col">
-              <div className="flex justify-between mb-4"><h3 className="font-bold text-white flex items-center gap-2"><BrainCircuit size={18}/> 核心 Prompt (提示词)</h3><button onClick={saveKB} className="bg-orange-500 text-white px-4 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1"><Save size={12}/> 保存设置</button></div>
-              <textarea value={kbText} onChange={e => setKbText(e.target.value)} className="flex-1 bg-black/40 border border-slate-800 rounded-2xl p-6 text-slate-400 font-mono text-sm leading-relaxed outline-none focus:border-orange-500/30 transition-all" />
+                    <div className="overflow-x-auto">
+                        {(() => {
+                            const { aggregation, features } = getAggregatedStats();
+                            const companies = Object.keys(aggregation);
+                            
+                            if (companies.length === 0) {
+                                return <div className="text-center py-20 text-slate-500">暂无数据记录</div>
+                            }
+
+                            return (
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="border-b border-slate-800 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                                            <th className="p-4 pl-0">物业公司</th>
+                                            {features.map(f => (
+                                                <th key={f} className="p-4 text-center">{f}</th>
+                                            ))}
+                                            <th className="p-4 text-right pr-0">总计</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800/50">
+                                        {companies.map(company => {
+                                            const rowTotal = features.reduce((acc, f) => acc + (aggregation[company][f] || 0), 0);
+                                            return (
+                                                <tr key={company} className="group hover:bg-white/5 transition-colors">
+                                                    <td className="p-4 pl-0 font-bold text-white text-sm">{company}</td>
+                                                    {features.map(f => (
+                                                        <td key={f} className="p-4 text-center text-slate-400 font-mono text-xs">
+                                                            {aggregation[company][f] ? (
+                                                                <span className="bg-orange-500/10 text-orange-500 px-2 py-1 rounded font-bold">{aggregation[company][f]}</span>
+                                                            ) : '-'}
+                                                        </td>
+                                                    ))}
+                                                    <td className="p-4 pr-0 text-right font-black text-white text-sm">{rowTotal}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            );
+                        })()}
+                    </div>
+                </div>
             </div>
-            <div className="bg-[#12151c] p-8 rounded-3xl border border-slate-800">
-              <h3 className="font-bold text-white mb-4">Prompt 工程说明</h3>
-              <div className="space-y-4 text-xs text-slate-500 leading-loose">
-                <p>此处配置 AI 的核心人设（System Instruction）。所有前端 AI 功能（智能问答、文书生成、纠纷诊断）均会受此影响。</p>
-                <p>建议包含：1. 身份定义（东元物业法务专家）；2. 法律依据（民法典）；3. 语言风格（严谨、专业）。</p>
+        )}
+
+        {/* ... (Existing Tabs KB, Requests, etc. Unchanged) ... */}
+        {activeTab === 'kb' && (
+             <div className="flex flex-col h-full gap-6">
+                <div className="bg-[#12151c] p-8 rounded-3xl border border-slate-800 flex flex-col flex-1">
+                    <div className="flex justify-between mb-4">
+                        <h3 className="font-bold text-white flex items-center gap-2"><BrainCircuit size={18}/> 智能助手核心 Prompt (System Instruction)</h3>
+                        <button onClick={saveKB} className="bg-orange-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2"><Save size={14}/> 保存所有配置</button>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-2">配置主聊天界面的 AI 角色设定与知识边界。</p>
+                    <textarea value={kbText} onChange={e => setKbText(e.target.value)} className="flex-1 bg-black/40 border border-slate-800 rounded-2xl p-6 text-slate-400 font-mono text-sm leading-relaxed outline-none focus:border-orange-500/30 transition-all resize-none mb-4" />
+                </div>
+
+                <div className="bg-[#12151c] p-8 rounded-3xl border border-slate-800 flex flex-col flex-1">
+                    <h3 className="font-bold text-white flex items-center gap-2 mb-2"><Activity size={18}/> 企业体检报告生成指令</h3>
+                    <p className="text-xs text-slate-500 mb-4">
+                        配置“企业法务体检”功能中生成深度报告的 AI 提示词。<br/>
+                        <span className="text-orange-500">注意：必须包含 <code>{`{{RISK_POINTS}}`}</code> 占位符，系统将自动替换为用户的风险项数据。</span>
+                    </p>
+                    <textarea value={healthCheckPrompt} onChange={e => setHealthCheckPrompt(e.target.value)} className="flex-1 bg-black/40 border border-slate-800 rounded-2xl p-6 text-slate-400 font-mono text-sm leading-relaxed outline-none focus:border-orange-500/30 transition-all resize-none" style={{minHeight: '300px'}} />
+                </div>
+            </div>
+        )}
+
+        {/* ... (Rest of existing tabs) ... */}
+        {activeTab === 'requests' && (
+            <div className="space-y-6">
+                <div className="bg-[#12151c] p-6 rounded-3xl border border-slate-800">
+                    <h3 className="font-bold text-white text-lg mb-6 flex items-center gap-2">
+                        <Inbox className="text-orange-500" /> 服务申请审批
+                    </h3>
+                    <div className="space-y-3">
+                        {serviceRequests.length === 0 ? (
+                            <div className="text-center py-10 text-slate-500 text-sm">暂无待处理的申请</div>
+                        ) : (
+                            serviceRequests.map(req => (
+                                <div key={req.id} className="bg-white/5 p-5 rounded-2xl border border-white/5 flex flex-col gap-3">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="text-white font-bold text-sm">{req.username}</span>
+                                                <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">{req.enterpriseName}</span>
+                                            </div>
+                                            <div className="text-[10px] text-slate-500">{new Date(req.timestamp).toLocaleString()}</div>
+                                        </div>
+                                        <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                            req.status === 'PENDING' ? 'bg-orange-500/20 text-orange-500' :
+                                            req.status === 'PROCESSED' ? 'bg-green-500/20 text-green-500' :
+                                            'bg-red-500/20 text-red-500'
+                                        }`}>
+                                            {req.status === 'PENDING' ? '待处理' : req.status === 'PROCESSED' ? '已处理' : '已驳回'}
+                                        </div>
+                                    </div>
+                                    <div className="bg-black/30 p-3 rounded-xl text-xs text-slate-300">
+                                        <span className="text-slate-500 font-bold mr-2">申请内容:</span>
+                                        {req.content}
+                                    </div>
+                                    {req.status === 'PENDING' && (
+                                        <div className="flex gap-2 justify-end mt-1">
+                                            <button 
+                                                onClick={() => handleProcessRequest(req.id, 'PROCESSED')}
+                                                className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold flex items-center gap-1"
+                                            >
+                                                <Check size={12}/> 标记已办理
+                                            </button>
+                                            <button 
+                                                onClick={() => handleProcessRequest(req.id, 'REJECTED')}
+                                                className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1"
+                                            >
+                                                <X size={12}/> 驳回
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* ... (Shortened tabs) ... */}
+        {activeTab === 'special' && (
+             <SimpleListEditor 
+                title="专项法律服务库" 
+                items={specialProjects}
+                onAdd={() => setEditingProject({id: Date.now().toString(), title: '', desc: ''})}
+                onDelete={(id: string) => deleteItem('project', id)}
+                renderItem={(item: SpecialProject) => (
+                    <>
+                       <div className="font-bold text-white text-sm mb-1">{item.title}</div>
+                       <div className="text-xs text-slate-500">{item.desc}</div>
+                       <button onClick={() => setEditingProject({...item})} className="mt-2 text-[10px] text-blue-400 hover:text-blue-300">编辑</button>
+                    </>
+                )}
+            />
+        )}
+
+        {/* ... Docs, Laws, Risk, Evidence, Scripts, SOP, Renovation ... */}
+        {/* Assume standard render here, preserving code space for the changed part */}
+        {['docs', 'laws', 'risk', 'evidence', 'scripts', 'sop', 'renovation'].includes(activeTab) && (
+            <>
+                {activeTab === 'docs' && (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center bg-[#12151c] p-6 rounded-3xl border border-slate-800">
+                            <h3 className="font-bold text-white">文档模板管理</h3>
+                            <button onClick={() => setEditingDoc({ id: Date.now().toString(), title: '', category: '全部', description: '', content: '' })} className="bg-orange-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1"><Plus size={14}/> 新增文档</button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {docs.map(doc => (
+                                <div key={doc.id} className="bg-[#12151c] p-5 rounded-2xl border border-slate-800 hover:border-orange-500/30 transition-colors group">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h4 className="font-bold text-white text-sm">{doc.title}</h4>
+                                        <span className="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">{doc.category}</span>
+                                    </div>
+                                    <p className="text-xs text-slate-500 mb-4 line-clamp-2">{doc.description}</p>
+                                    <div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => setEditingDoc({...doc})} className="p-2 bg-slate-800 rounded-lg text-slate-300 hover:text-white"><Edit3 size={14}/></button>
+                                        <button onClick={() => deleteItem('doc', doc.id)} className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500 hover:text-white"><Trash2 size={14}/></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {activeTab === 'laws' && <SimpleListEditor title="民法典法规库" items={lawArticles} onAdd={() => setEditingLaw({id: Date.now().toString(), title: '', content: ''})} onDelete={(id: string) => deleteItem('law', id)} renderItem={(item: LawArticle) => (<><div className="font-bold text-white text-sm mb-1">{item.title}</div><div className="text-xs text-slate-500 line-clamp-2">{item.content}</div><button onClick={() => setEditingLaw({...item})} className="mt-2 text-[10px] text-blue-400 hover:text-blue-300">编辑内容</button></>)} />}
+                {activeTab === 'risk' && <SimpleListEditor title="风控自查场景管理" items={riskScenarios} onAdd={() => setEditingRisk({id: Date.now().toString(), title: '', questions: ''})} onDelete={(id: string) => deleteItem('risk', id)} renderItem={(item: RiskScenario) => (<><div className="font-bold text-white text-sm mb-1">{item.title}</div><div className="text-xs text-slate-500">{item.questions?.length || 0} 个检查项</div><button onClick={() => setEditingRisk({id: item.id, title: item.title || '', questions: (item.questions || []).join('\n')})} className="mt-2 text-[10px] text-blue-400 hover:text-blue-300">编辑问题清单</button></>)} />}
+                {activeTab === 'evidence' && <SimpleListEditor title="取证清单配置" items={evidenceList} onAdd={() => setEditingEvidence({id: Date.now().toString(), title: '', items: ''})} onDelete={(id: string) => deleteItem('evidence', id)} renderItem={(item: EvidenceGroup) => (<><div className="font-bold text-white text-sm mb-1">{item.title}</div><div className="text-xs text-slate-500">{item.items?.length || 0} 个证据点</div><button onClick={() => setEditingEvidence({id: item.id, title: item.title, items: item.items.join('\n')})} className="mt-2 text-[10px] text-blue-400 hover:text-blue-300">编辑清单</button></>)} />}
+                {activeTab === 'scripts' && <SimpleListEditor title="催费话术场景库" items={scripts} onAdd={() => setEditingScript({id: Date.now().toString(), title: '', steps: [{label: '', content: ''}]})} onDelete={(id: string) => deleteItem('script', id)} renderItem={(item: ScriptScenario) => (<><div className="font-bold text-white text-sm mb-1">{item.title}</div><div className="text-xs text-slate-500">{item.steps?.length || 0} 个对话步骤</div><button onClick={() => setEditingScript(JSON.parse(JSON.stringify(item)))} className="mt-2 text-[10px] text-blue-400 hover:text-blue-300">编辑话术</button></>)} />}
+                {activeTab === 'sop' && <SimpleListEditor title="紧急情况 SOP 预案" items={sops} onAdd={() => setEditingSOP({id: Date.now().toString(), title: '', level: 'MEDIUM', steps: '', tips: ''})} onDelete={(id: string) => deleteItem('sop', id)} renderItem={(item: EmergencySOP) => (<><div className="flex items-center gap-2 mb-1"><span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${item.level === 'HIGH' ? 'bg-red-500 text-white' : 'bg-orange-500 text-white'}`}>{item.level}</span><span className="font-bold text-white text-sm">{item.title}</span></div><div className="text-xs text-slate-500 line-clamp-1">{item.tips}</div><button onClick={() => setEditingSOP({id: item.id, title: item.title, level: item.level, steps: item.steps.join('\n'), tips: item.tips})} className="mt-2 text-[10px] text-blue-400 hover:text-blue-300">编辑预案</button></>)} />}
+                {activeTab === 'renovation' && <div className="bg-[#12151c] p-6 rounded-3xl border border-slate-800"><div className="flex justify-between items-center mb-6"><h3 className="font-bold text-white text-lg">装修违规巡查项配置</h3><div className="flex gap-2"><input id="new-reno-item" placeholder="输入新检查项" className="bg-black/40 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white w-64" /><button onClick={() => { const val = (document.getElementById('new-reno-item') as HTMLInputElement).value; if(val.trim()){ const n = [...renovationItems, val.trim()]; setRenovationItems(n); db.saveRenovationChecklist(n); (document.getElementById('new-reno-item') as HTMLInputElement).value = ''; } }} className="bg-orange-500 px-4 py-2 rounded-xl text-white text-xs font-bold">添加</button></div></div><div className="space-y-2">{renovationItems.map((item, idx) => (<div key={idx} className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/5">{editingRenovationItem?.idx === idx ? (<div className="flex gap-2 w-full"><input autoFocus value={editingRenovationItem.text} onChange={e => setEditingRenovationItem({...editingRenovationItem, text: e.target.value})} className="flex-1 bg-black/40 border border-slate-600 rounded-lg px-2 py-1 text-sm text-white" /><button onClick={() => { const n = [...renovationItems]; n[idx] = editingRenovationItem.text; setRenovationItems(n); db.saveRenovationChecklist(n); setEditingRenovationItem(null); }} className="text-green-500"><Check size={16}/></button></div>) : (<div className="flex items-center gap-2"><span className="text-slate-500 text-xs font-mono mr-2">{idx + 1}.</span><span className="text-white text-sm">{item}</span><button onClick={() => setEditingRenovationItem({idx, text: item})} className="ml-2 text-slate-600 hover:text-slate-400"><Edit3 size={12}/></button></div>)}<button onClick={() => { const n = renovationItems.filter((_, i) => i !== idx); setRenovationItems(n); db.saveRenovationChecklist(n); }} className="text-slate-500 hover:text-red-500"><Trash2 size={16}/></button></div>))}</div></div>}
+            </>
+        )}
+
+        {activeTab === 'resources' && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="bg-[#12151c] border border-slate-800 rounded-[2.5rem] p-8">
+              <h3 className="text-lg font-black text-white mb-6 flex items-center gap-2">
+                 <Smartphone className="text-orange-500" size={20}/> 登录与注册配置
+              </h3>
+              {/* ... (Login config code same as before) ... */}
+              <div className="flex items-center justify-between bg-white/5 p-5 rounded-2xl border border-white/5 mb-4">
+                 <div>
+                    <div className="font-bold text-white text-sm">启用手机号验证码登录</div>
+                    <div className="text-xs text-slate-500 mt-1">用户可使用手机号+验证码登录</div>
+                 </div>
+                 <button 
+                   onClick={() => handleConfigChange({ enablePhoneLogin: !systemConfig.enablePhoneLogin })}
+                   className={`w-12 h-6 rounded-full transition-colors relative ${systemConfig.enablePhoneLogin ? 'bg-orange-500' : 'bg-slate-700'}`}
+                 >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${systemConfig.enablePhoneLogin ? 'left-7' : 'left-1'}`}></div>
+                 </button>
+              </div>
+              <div className="space-y-4">
+                 <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 ml-1 flex items-center gap-2"><PhoneCall size={14}/> 律师专线号码配置</label>
+                    <input 
+                      type="text"
+                      value={systemConfig.lawyerPhoneNumber || ''}
+                      onChange={(e) => handleConfigChange({ lawyerPhoneNumber: e.target.value })}
+                      placeholder="例如：400-888-9999"
+                      className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-300 focus:border-orange-500 outline-none"
+                    />
+                 </div>
+                 <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 ml-1">AI 助手欢迎语</label>
+                    <textarea 
+                      value={systemConfig.welcomeMessage}
+                      onChange={(e) => handleConfigChange({ welcomeMessage: e.target.value })}
+                      className="w-full bg-black/40 border border-slate-800 rounded-xl p-4 text-sm text-slate-300 h-24 focus:border-orange-500 outline-none resize-none"
+                    />
+                 </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Config Tab (Splash Screen & System Settings) */}
-        {activeTab === 'config' && (
-          <div className="max-w-4xl mx-auto space-y-8">
-             {/* 登录设置 */}
-             <div className="bg-[#12151c] border border-slate-800 rounded-[2.5rem] p-10">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl font-black text-white flex items-center gap-3">
-                     <Settings className="text-orange-500" /> 功能模块开关
-                  </h3>
-                  <button
-                    onClick={saveSystemConfig}
-                    className="bg-orange-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-orange-600 transition-colors"
-                  >
-                    <Save size={14} /> 保存配置
-                  </button>
-                </div>
-                <div className="bg-white/5 p-6 rounded-2xl flex items-center justify-between">
-                   <div className="flex items-center gap-4">
-                      <div className="bg-blue-500/20 p-3 rounded-xl text-blue-400"><Smartphone size={24} /></div>
-                      <div>
-                         <div className="font-bold text-white">手机验证码登录</div>
-                         <div className="text-xs text-slate-500 mt-1">开启后，登录页将显示"验证并登录"选项。</div>
-                      </div>
-                   </div>
-                   <button
-                     onClick={() => handleConfigChange({ enablePhoneLogin: !tempConfig.enablePhoneLogin })}
-                     className={`w-14 h-8 rounded-full p-1 transition-colors ${tempConfig.enablePhoneLogin ? 'bg-orange-500' : 'bg-slate-700'}`}
-                   >
-                      <div className={`w-6 h-6 bg-white rounded-full transition-transform ${tempConfig.enablePhoneLogin ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                   </button>
-                </div>
-
-                {/* AI 欢迎语配置 (新增加) */}
-                <div className="mt-8">
-                  <h4 className="font-bold text-white mb-4 flex items-center gap-2">
-                     <MessageSquare size={18} className="text-blue-400" /> AI 助手默认欢迎语
-                  </h4>
-                  <textarea
-                    value={tempConfig.welcomeMessage}
-                    onChange={(e) => handleConfigChange({ welcomeMessage: e.target.value })}
-                    className="w-full bg-white/5 border border-slate-700 rounded-2xl p-6 text-slate-300 text-sm leading-relaxed outline-none focus:border-orange-500/50 h-32 resize-none"
-                    placeholder="配置用户进入 AI 咨询页面时看到的默认欢迎语..."
-                  />
-                  <div className="text-[10px] text-slate-500 mt-2 flex items-center gap-2">
-                     <span>修改后点击上方"保存配置"按钮生效。</span>
-                     {tempConfig.welcomeMessage !== systemConfig.welcomeMessage && (
-                       <span className="text-orange-400 font-bold">● 有未保存的更改</span>
-                     )}
-                  </div>
-                </div>
-             </div>
-
-             {/* 开屏页设置 */}
-             <div className="bg-[#12151c] border border-slate-800 rounded-[2.5rem] p-10">
-                <h3 className="text-xl font-black text-white mb-6 flex items-center gap-3">
-                   <MonitorPlay className="text-orange-500" /> App 开屏页配置
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                   {/* 预览区 */}
-                   <div className="space-y-4">
-                      <div className="text-xs font-bold text-slate-500 uppercase">当前效果预览</div>
-                      <div className="relative aspect-[9/16] bg-black rounded-3xl overflow-hidden border-4 border-slate-800 shadow-2xl flex items-center justify-center">
-                         {splashImage ? (
-                            <img src={splashImage} className="w-full h-full object-cover" alt="Splash Preview" />
-                         ) : (
-                            // 默认预览
-                            <div className="w-full h-full bg-[#F38020] flex flex-col items-center justify-center text-white p-6 relative">
-                               <div className="absolute inset-0 bg-gradient-to-br from-[#FF9800] via-[#F38020] to-[#E65100]"></div>
-                               <h1 className="text-4xl font-bold relative z-10 tracking-tighter">eastcapital</h1>
-                               <div className="text-sm font-bold mt-2 relative z-10 tracking-[0.2em]">东元法物</div>
-                               <div className="absolute bottom-10 text-[8px] opacity-50 font-mono">DEFAULT PREVIEW</div>
-                            </div>
-                         )}
-                         <div className="absolute top-0 w-32 h-6 bg-black rounded-b-xl z-20"></div>
-                      </div>
-                   </div>
-
-                   {/* 操作区 */}
-                   <div className="flex flex-col justify-center space-y-6">
-                      <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-6">
-                         <h4 className="font-bold text-orange-500 mb-2">配置说明</h4>
-                         <p className="text-xs text-orange-200/60 leading-relaxed">
-                            您可上传自定义的品牌宣传图作为 App 启动页。图片将全屏展示（建议尺寸 1080x1920，PNG/JPG 格式）。若不上传，系统将显示默认的“东元法物”橙色品牌动画。
-                         </p>
-                      </div>
-
-                      <div className="space-y-3">
-                         <button 
-                           onClick={() => splashInputRef.current?.click()}
-                           className="w-full py-4 bg-white text-black rounded-xl font-black text-sm hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
-                         >
-                           <Upload size={18} /> 上传自定义开屏图
-                         </button>
-                         <input ref={splashInputRef} type="file" accept="image/*" className="hidden" onChange={handleSplashUpload} />
-
-                         {splashImage && (
-                           <button 
-                             onClick={handleResetSplash}
-                             className="w-full py-4 bg-slate-800 text-slate-400 rounded-xl font-bold text-sm hover:bg-red-500/10 hover:text-red-500 transition-colors flex items-center justify-center gap-2"
-                           >
-                             <Trash2 size={18} /> 恢复默认动画
-                           </button>
-                         )}
-                      </div>
-                   </div>
-                </div>
-             </div>
-          </div>
-        )}
-
-        {/* Users Tab (Updated with Approval) */}
-        {activeTab === 'users' && (
-          <div className="space-y-8">
-
-             {/* 待审核列表 - 使用 memoized 数据 */}
-             {memoizedData.pendingUsers.length > 0 && (
-               <div className="bg-orange-500/10 border border-orange-500/30 rounded-3xl p-6">
-                 <h4 className="font-bold text-orange-500 flex items-center gap-2 mb-4"><UserCheck size={18} /> 待审核注册申请 ({memoizedData.pendingUsers.length})</h4>
-                 <div className="space-y-3">
-                    {memoizedData.pendingUsers.map(u => (
-                      <div key={u.id} className="bg-[#12151c] rounded-2xl p-4 flex items-center justify-between border border-slate-800">
-                         <div className="flex items-center gap-4">
-                            <div className="bg-slate-800 p-2 rounded-lg text-slate-400"><UserPlus size={20} /></div>
-                            <div>
-                               <div className="text-white font-bold">{u.username} <span className="text-slate-500 font-normal text-xs ml-2">{u.phone_number}</span></div>
-                               <div className="text-xs text-orange-400 mt-1">申请加入：{u.enterprise_name}</div>
-                            </div>
-                         </div>
-                         <div className="flex gap-2">
-                            <button onClick={() => handleApproveUser(u.id)} className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-xl text-xs font-bold flex items-center gap-1"><Check size={14}/> 批准</button>
-                            <button onClick={() => handleRejectUser(u.id)} className="px-4 py-2 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1"><X size={14}/> 拒绝</button>
-                         </div>
-                      </div>
-                    ))}
+            <div className="bg-[#12151c] border border-slate-800 rounded-[2.5rem] p-8">
+               <h3 className="text-lg font-black text-white mb-6 flex items-center gap-2">
+                  <ImageIcon className="text-orange-500" size={20}/> 品牌开屏页设置
+               </h3>
+               {/* ... (Splash config code same as before) ... */}
+               <div className="flex items-center justify-between bg-white/5 p-5 rounded-2xl border border-white/5 mb-6">
+                 <div>
+                    <div className="font-bold text-white text-sm">启用品牌开屏页</div>
+                    <div className="text-xs text-slate-500 mt-1">开启后 App 启动时展示品牌页面</div>
                  </div>
+                 <button 
+                   onClick={() => handleConfigChange({ enableSplashScreen: !systemConfig.enableSplashScreen })}
+                   className={`w-12 h-6 rounded-full transition-colors relative ${systemConfig.enableSplashScreen !== false ? 'bg-orange-500' : 'bg-slate-700'}`}
+                 >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${systemConfig.enableSplashScreen !== false ? 'left-7' : 'left-1'}`}></div>
+                 </button>
                </div>
-             )}
-
-             <div className="bg-[#12151c] rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
-               <div className="p-6 border-b border-slate-800 bg-black/20">
-                  <h4 className="font-bold text-white text-sm">正式员工列表 ({memoizedData.approvedUsers.length})</h4>
-               </div>
-               <table className="w-full text-left border-collapse">
-                 <thead>
-                   <tr className="bg-black/20 text-[10px] font-black uppercase tracking-widest text-slate-600 border-b border-slate-800">
-                     <th className="p-6">账号信息</th>
-                     <th className="p-6">所属物业公司</th>
-                     <th className="p-6">状态</th>
-                     <th className="p-6 text-right">操作</th>
-                   </tr>
-                 </thead>
-                 <tbody className="divide-y divide-slate-800">
-                   {memoizedData.approvedUsers.map(u => (
-                     <tr key={u.id} className="hover:bg-white/5 transition-colors group">
-                       <td className="p-6 font-bold text-white text-sm">
-                          <div className="flex items-center gap-3">
-                             <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs text-slate-400 shrink-0">
-                                {u.username.slice(0, 1).toUpperCase()}
-                             </div>
-                             <div>
-                                <div>{u.username}</div>
-                                <div className="text-xs text-slate-500 font-normal">{u.phone_number || '无手机号'}</div>
-                             </div>
+               <div className="flex gap-6 items-start">
+                  <div className="w-32 aspect-[9/16] bg-black rounded-xl border border-slate-800 overflow-hidden relative group shadow-lg">
+                      {splashImage ? (
+                          <img src={splashImage} className="w-full h-full object-cover" alt="Splash" />
+                      ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center text-slate-600 bg-slate-900">
+                             <div className="text-[9px] font-bold">默认开屏</div>
                           </div>
-                       </td>
-                       <td className="p-6 text-xs text-slate-400">
-                          <span className={`px-2 py-1 rounded-md ${u.role === UserRole.ADMIN ? 'bg-purple-900/30 text-purple-400' : 'bg-slate-800 text-slate-300'}`}>
-                             {u.role === UserRole.ADMIN ? '系统全局' : (u.enterprise_name || '未分配')}
-                          </span>
-                       </td>
-                       <td className="p-6 text-xs">
-                          {u.approval_status === 'REJECTED' ? (
-                            <span className="text-red-500 flex items-center gap-1"><XCircle size={12}/> 已拒绝</span>
-                          ) : (
-                            <span className="text-green-500 flex items-center gap-1"><Check size={12}/> 正常</span>
-                          )}
-                       </td>
-                       <td className="p-6 text-right">
-                         <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all">
-                            <button onClick={() => setEditingUser({...u})} className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white"><Edit3 size={16}/></button>
-                            <button onClick={() => deleteItem('user', u.id)} className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white"><Trash2 size={16}/></button>
-                         </div>
-                       </td>
-                     </tr>
-                   ))}
-                 </tbody>
-               </table>
+                      )}
+                  </div>
+                  <div className="flex-1 space-y-4 pt-2">
+                      <p className="text-xs text-slate-500 leading-relaxed">自定义应用启动时的开屏画面。</p>
+                      <div className="flex gap-3">
+                         <button onClick={() => splashInputRef.current?.click()} className="px-5 py-2.5 bg-white text-black rounded-xl text-xs font-black hover:bg-slate-200 transition-colors flex items-center gap-2"><Upload size={14}/> 上传图片</button>
+                         {splashImage && <button onClick={handleResetSplash} className="px-5 py-2.5 bg-red-500/10 text-red-500 rounded-xl text-xs font-black">恢复默认</button>}
+                         <input type="file" ref={splashInputRef} onChange={handleSplashUpload} accept="image/*" className="hidden" />
+                      </div>
+                  </div>
+               </div>
             </div>
-            <button onClick={() => setEditingUser({ username: '', password: '123', role: UserRole.USER, is_certified: true, approval_status: 'APPROVED', enterprise_name: '' })} className="bg-orange-500 text-white px-6 py-3 rounded-xl text-xs font-bold w-full">新增员工账号</button>
+
+            <div className="bg-[#12151c] border border-slate-800 rounded-[2.5rem] p-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-white text-lg">物业公司库</h3>
+                    <div className="flex gap-2">
+                        <input value={newCompanyName} onChange={e => setNewCompanyName(e.target.value)} placeholder="输入公司全称" className="bg-black/40 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white" />
+                        <button onClick={handleAddCompany} className="bg-orange-500 px-4 py-2 rounded-xl text-white text-xs font-bold">添加</button>
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {enterprises.map(ent => (
+                        <div key={ent} className="flex items-center gap-2 bg-white/5 px-3 py-2 rounded-xl border border-white/5">
+                            <span className="text-white font-bold text-xs">{ent}</span>
+                            <button onClick={() => handleDeleteCompany(ent)} className="text-slate-500 hover:text-red-500"><X size={12}/></button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="bg-[#12151c] border border-slate-800 rounded-[2.5rem] p-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-white text-lg">海报背景模版</h3>
+                    <button onClick={() => posterFileRef.current?.click()} className="bg-blue-600 px-4 py-2 rounded-xl text-white text-xs font-bold flex items-center gap-2"><Plus size={14}/> 上传</button>
+                    <input type="file" ref={posterFileRef} onChange={handlePosterImageUpload} className="hidden" accept="image/*" />
+                </div>
+                <div className="grid grid-cols-4 gap-4">
+                    {customPosters.map(p => (
+                        <div key={p.id} className="relative aspect-[3/4] rounded-xl overflow-hidden group">
+                            <img src={p.imageBase64} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => deleteItem('poster', p.id)} className="bg-red-500 p-2 rounded-full text-white"><Trash2 size={16}/></button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* --- UPDATED QR SECTION --- */}
+            <div className="bg-[#12151c] border border-slate-800 rounded-[2.5rem] p-8">
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h3 className="font-bold text-white text-lg">企业微信/顾问二维码配置</h3>
+                        <p className="text-xs text-slate-500 mt-1">用于前端「联系顾问」及「专项服务申请」弹窗随机展示</p>
+                    </div>
+                    <button onClick={() => qrFileRef.current?.click()} className="bg-green-600 px-4 py-2 rounded-xl text-white text-xs font-bold flex items-center gap-2"><Plus size={14}/> 上传</button>
+                    <input type="file" ref={qrFileRef} onChange={handleQRImageUpload} className="hidden" accept="image/*" />
+                </div>
+                <div className="grid grid-cols-4 gap-4">
+                    {contactQRs.map(qr => (
+                        <div key={qr.id} className="bg-white p-2 rounded-xl flex flex-col items-center gap-2 relative group">
+                            <img src={qr.imageBase64} className="w-full aspect-square object-contain" />
+                            <span className="text-black text-[10px] font-bold">{qr.name}</span>
+                            <button onClick={() => deleteItem('qr', qr.id)} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={10}/></button>
+                        </div>
+                    ))}
+                </div>
+            </div>
           </div>
         )}
 
-        {/* ... (其他 Tab 内容保持不变) ... */}
-        {/* Companies Tab */}
-        {activeTab === 'companies' && (
-           <div className="space-y-6">
-             <div className="flex justify-between items-center bg-[#12151c] p-8 rounded-3xl border border-slate-800">
-               <div>
-                  <h3 className="font-black text-white text-xl">物业公司主体管理</h3>
-                  <p className="text-xs text-slate-500 mt-2">创建公司后，可在"员工账号体系"中分配账号归属。</p>
-               </div>
-               <button onClick={() => setShowCompanyModal(true)} className="bg-orange-500 text-white px-8 py-3 rounded-xl text-xs font-bold flex items-center gap-2">
-                 <Plus size={16} /> 新增公司
-               </button>
-             </div>
-
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {memoizedData.enterprisesWithUserCount.map(({ name, userCount }) => (
-                  <div key={name} className="bg-[#12151c] border border-slate-800 rounded-3xl p-6 flex items-center justify-between group hover:border-orange-500/30 transition-all">
-                    <div className="flex items-center gap-4">
-                       <div className="bg-white/5 p-3 rounded-xl text-slate-300 group-hover:bg-orange-500 group-hover:text-white transition-colors">
-                          <Building size={24} />
-                       </div>
-                       <div>
-                          <div className="font-bold text-white">{name}</div>
-                          <div className="text-[10px] text-slate-500 mt-1">
-                             现有员工: {userCount} 人
-                          </div>
-                       </div>
+        {/* ... (Rights, Users tabs unchanged) ... */}
+        {activeTab === 'rights' && (
+             <div className="max-w-4xl mx-auto space-y-6">
+                 {/* ... (Existing Rights content) ... */}
+                 <div className="bg-[#12151c] border border-slate-800 rounded-[2.5rem] p-8">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-black text-white flex items-center gap-2">
+                           <TrendingUp className="text-orange-500" size={20} /> 企业运营数据录入
+                        </h3>
+                        {/* ... (Existing selector and inputs) ... */}
+                        <div className="flex items-center gap-3">
+                            <label className="text-xs font-bold text-slate-500">选择需配置的企业</label>
+                            <select value={targetEnterprise} onChange={(e) => setTargetEnterprise(e.target.value)} className="bg-black/40 border border-slate-700 text-white text-xs font-bold rounded-xl px-4 py-2 outline-none focus:border-orange-500">
+                                <option value="" disabled>-- 请选择 --</option>
+                                {enterprises.map(e => <option key={e} value={e}>{e}</option>)}
+                            </select>
+                        </div>
                     </div>
-                    <button onClick={() => handleDeleteCompany(name)} className="p-2 text-slate-600 hover:text-red-500 transition-colors">
-                       <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
+                    
+                    {!targetEnterprise ? (
+                        <div className="p-8 text-center text-slate-500 bg-white/5 rounded-2xl border border-dashed border-slate-800">
+                            请先在右上方选择一个物业公司进行数据配置
+                        </div>
+                    ) : (
+                        <div className="space-y-6 animate-fade-in">
+                            {/* ... (Vip Level Preview) ... */}
+                            {(() => {
+                                const { current, next } = getCurrentVipInfo();
+                                return (
+                                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-4 border border-slate-700 flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-3 rounded-full bg-[#FFD700]/10 text-[#FFD700]"><Crown size={20} fill="#FFD700" /></div>
+                                            <div>
+                                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">实时预估 VIP 等级 (自动联动)</div>
+                                                <div className="text-base font-black text-white mt-0.5 flex items-center gap-2">{current ? current.name : '普通会员'}<span className="text-[9px] bg-white/10 px-2 py-0.5 rounded text-slate-300 font-normal">{current ? current.label : '未达标'}</span></div>
+                                            </div>
+                                        </div>
+                                        {next && (<div className="flex items-center gap-3 opacity-60"><ArrowRight size={16} className="text-slate-500" /><div className="text-right"><div className="text-[10px] text-slate-400 font-bold uppercase">下一级目标</div><div className="text-xs font-bold text-slate-300">{next.name} (还需 {(next.thresholdAmount - entStats.totalEntrustedAmount).toLocaleString()})</div></div></div>)}
+                                    </div>
+                                );
+                            })()}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="bg-white/5 p-5 rounded-2xl border border-white/5"><label className="text-xs font-bold text-slate-500 block mb-2">累计委托金额 (Total Entrusted)</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">¥</span><input type="number" value={entStats.totalEntrustedAmount} onChange={e => handleStatChange('totalEntrustedAmount', parseInt(e.target.value) || 0)} className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-6 pr-4 py-3 text-white font-bold"/></div><p className="text-[9px] text-slate-500 mt-2">修改此数值将自动触发企业 VIP 等级升降。</p></div>
+                                <div className="bg-white/5 p-5 rounded-2xl border border-white/5"><label className="text-xs font-bold text-slate-500 block mb-2">累计追回金额 (Total Recovered)</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">¥</span><input type="number" value={entStats.totalRecoveredAmount} onChange={e => handleStatChange('totalRecoveredAmount', parseInt(e.target.value) || 0)} className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-6 pr-4 py-3 text-white font-bold"/></div></div>
+                            </div>
+                            <div className="col-span-2 text-right"><span className="text-[10px] text-green-500 flex items-center justify-end gap-1"><Check size={12}/> 数据将自动保存至「{targetEnterprise}」</span></div>
+                        </div>
+                    )}
+                 </div>
+                 {/* ... (VIP Levels Config) ... */}
+                 <div className="bg-[#12151c] border border-slate-800 rounded-[2.5rem] p-8">
+                    <h3 className="text-lg font-black text-white mb-6 flex items-center gap-2"><Crown className="text-orange-500" size={20} /> VIP 等级标准 (全局通用)</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {vipLevels.map(lvl => (
+                             <div key={lvl.id} className="bg-white/5 p-5 rounded-2xl border border-white/5 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-white/5 to-transparent rounded-bl-full pointer-events-none"></div>
+                                <h4 className="font-bold text-white text-sm mb-1">{lvl.name}</h4>
+                                <div className="space-y-2 mt-3">
+                                  <div><label className="text-[10px] text-slate-500 block mb-1">解锁金额 (元)</label><input type="number" value={lvl.thresholdAmount} onChange={e => handleLevelUpdate(lvl.id, 'thresholdAmount', parseInt(e.target.value) || 0)} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-orange-400 font-black text-xs"/></div>
+                                  <div><label className="text-[10px] text-slate-500 block mb-1">专项服务可选数量</label><input type="number" value={lvl.selectableProjectsCount || 0} onChange={e => handleLevelUpdate(lvl.id, 'selectableProjectsCount', parseInt(e.target.value) || 0)} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-blue-400 font-black text-xs"/></div>
+                                </div>
+                             </div>
+                        ))}
+                    </div>
+                 </div>
+                 {/* ... (Quota Config) ... */}
+                 <div className="bg-[#12151c] border border-slate-800 rounded-[2.5rem] p-8"><h3 className="text-lg font-black text-white mb-6">人工干预额度 (手动充值)</h3><div className="space-y-3">{users.filter(u => u.role !== UserRole.ADMIN).map(u => (<div key={u.id} className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/5"><div><div className="font-bold text-white text-sm">{u.username} <span className="text-[10px] text-slate-500 bg-slate-800 px-1 rounded ml-1">{u.role}</span></div><div className="text-xs text-slate-500 mt-0.5">{u.enterpriseName}</div></div><div className="flex gap-6 items-center"><div className="text-right"><div className="text-[9px] text-slate-500 uppercase">律师函</div><div className="font-bold text-orange-400 text-sm">{u.quota?.lawyerLetters || 0}</div></div><div className="text-right"><div className="text-[9px] text-slate-500 uppercase">咨询</div><div className="font-bold text-blue-400 text-sm">{u.quota?.consultations || 0}</div></div><button onClick={() => { const newQuota = { ...u.quota, lawyerLetters: (u.quota?.lawyerLetters || 0) + 5, consultations: (u.quota?.consultations || 0) + 20 } as any; db.updateUser(u.id, { quota: newQuota }); refreshData(); }} className="bg-slate-700 hover:bg-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">充值</button></div></div>))}</div></div>
              </div>
-           </div>
+        )}
+
+        {/* ... (Users tab unchanged) ... */}
+        {activeTab === 'users' && (
+          <div className="space-y-6">
+             {users.some(u => u.approvalStatus === 'PENDING') && (<div className="bg-orange-500/10 border border-orange-500/30 rounded-3xl p-6"><h4 className="font-bold text-orange-500 flex items-center gap-2 mb-4 text-sm"><UserCheck size={16} /> 待审核注册申请</h4><div className="space-y-2">{users.filter(u => u.approvalStatus === 'PENDING').map(u => (<div key={u.id} className="bg-[#12151c] rounded-xl p-3 flex items-center justify-between border border-slate-800"><div className="flex items-center gap-3"><div className="bg-slate-800 p-2 rounded-lg text-slate-400"><UserPlus size={16} /></div><div><div className="text-white font-bold text-sm">{u.username} <span className="text-slate-500 font-normal text-xs ml-2">{u.phoneNumber}</span></div><div className="text-xs text-orange-400 mt-0.5">申请加入：{u.enterpriseName}</div></div></div><div className="flex gap-2"><button onClick={() => handleApproveUser(u.id)} className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold flex items-center gap-1"><Check size={12}/> 批准</button><button onClick={() => handleRejectUser(u.id)} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1"><X size={12}/> 拒绝</button></div></div>))}</div></div>)}
+             <div className="bg-[#12151c] rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
+               <div className="p-4 border-b border-slate-800 bg-white/5 flex justify-between items-center"><h4 className="font-bold text-white text-sm">用户列表</h4><button onClick={() => setEditingUser({ id: Date.now().toString(), username: '', password: '123', role: UserRole.EMPLOYEE, isCertified: true, approvalStatus: 'APPROVED', enterpriseName: '', quota: { lawyerLetters: 0, consultations: 0 } })} className="bg-orange-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1"><Plus size={14}/> 新增用户</button></div>
+               <table className="w-full text-left border-collapse"><thead><tr className="text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-800"><th className="p-4">用户</th><th className="p-4">角色</th><th className="p-4">所属公司</th><th className="p-4 text-right">操作</th></tr></thead><tbody className="divide-y divide-slate-800">{users.filter(u => u.approvalStatus !== 'PENDING').map(u => (<tr key={u.id} className="hover:bg-white/5 transition-colors group"><td className="p-4 font-bold text-white text-sm"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs text-slate-400 shrink-0">{u.username.slice(0, 1).toUpperCase()}</div><div><div>{u.username}</div><div className="text-xs text-slate-500 font-normal">{u.phoneNumber || '无手机号'}</div></div></div></td><td className="p-4 text-xs text-slate-400">{u.role}</td><td className="p-4 text-xs text-slate-400">{u.enterpriseName || '-'}</td><td className="p-4 text-right"><div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100 transition-all"><button onClick={() => setEditingUser({...u})} className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white"><Edit3 size={14}/></button><button onClick={() => deleteItem('user', u.id)} className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white"><Trash2 size={14}/></button></div></td></tr>))}</tbody></table>
+            </div>
+          </div>
         )}
         
-        {/* Generic List View for Docs/Evidence/Laws/Risk */}
-        {activeTab !== 'kb' && activeTab !== 'config' && activeTab !== 'users' && activeTab !== 'companies' && activeTab !== 'posters' && activeTab !== 'contact' && (
-          <div className="space-y-6">
-            <div className="flex gap-2">
-              <button 
-                onClick={() => {
-                   if (activeTab === 'docs') setEditingDoc({ title: '', category: categories[1] || '全部', description: '', content: '' });
-                   if (activeTab === 'risk') setEditingRisk({ title: '新风险场景', risk_level: 'Medium', content: '', questions: [] });
-                   if (activeTab === 'evidence') setEditingEvidence({ title: '新取证分类', items: [] });
-                   if (activeTab === 'laws') setEditingLaw({ title: '', content: '' });
-                }}
-                className="bg-orange-500 text-white px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-orange-600 transition-colors"
-              >
-                <Plus size={16}/> 新增项目
-              </button>
-              {activeTab === 'docs' && (
-                <button onClick={() => setShowCatManager(true)} className="bg-slate-800 text-white px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors"><ListFilter size={16}/> 业务分类管理</button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {/* Docs Rendering */}
-              {activeTab === 'docs' && docs.map(doc => (
-                <div key={doc.id} className="bg-[#12151c] border border-slate-800 p-6 rounded-3xl group hover:border-orange-500/50 transition-all">
-                  <div className="flex justify-between mb-4">
-                    <span className="text-[9px] bg-slate-800 text-slate-400 px-2 py-1 rounded uppercase font-bold">{doc.category}</span>
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setEditingDoc(doc)} className="text-slate-500 hover:text-white"><Edit3 size={16}/></button>
-                      <button onClick={() => deleteItem('doc', doc.id)} className="text-slate-500 hover:text-red-500"><Trash2 size={16}/></button>
-                    </div>
-                  </div>
-                  <h4 className="font-bold text-white mb-2">{doc.title}</h4>
-                  <p className="text-[10px] text-slate-500 leading-relaxed line-clamp-2">{doc.description}</p>
-                </div>
-              ))}
-
-              {/* Risk Rendering */}
-              {activeTab === 'risk' && riskScenarios.map(r => (
-                <div key={r.id} className="bg-[#12151c] border border-slate-800 p-6 rounded-3xl group hover:border-orange-500/50 transition-all">
-                  <div className="flex justify-between mb-4">
-                     <h4 className="font-bold text-white">{r.title}</h4>
-                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setEditingRisk(r)} className="text-slate-500 hover:text-white"><Edit3 size={16}/></button>
-                      <button onClick={() => deleteItem('risk', r.id)} className="text-slate-500 hover:text-red-500"><Trash2 size={16}/></button>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    {r.questions?.slice(0, 3).map((q, i) => (
-                      <div key={i} className="text-[10px] text-slate-500 truncate">• {q}</div>
-                    ))}
-                    {(r.questions?.length || 0) > 3 && <div className="text-[9px] text-slate-600">...共 {r.questions?.length} 项</div>}
-                  </div>
-                </div>
-              ))}
-
-              {/* Evidence Rendering */}
-              {activeTab === 'evidence' && evidenceList.map(e => (
-                 <div key={e.id} className="bg-[#12151c] border border-slate-800 p-6 rounded-3xl group hover:border-orange-500/50 transition-all">
-                  <div className="flex justify-between mb-4">
-                     <h4 className="font-bold text-white">{e.title}</h4>
-                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setEditingEvidence(e)} className="text-slate-500 hover:text-white"><Edit3 size={16}/></button>
-                      <button onClick={() => deleteItem('evidence', e.id)} className="text-slate-500 hover:text-red-500"><Trash2 size={16}/></button>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    {e.items.slice(0, 3).map((item, i) => (
-                      <div key={i} className="text-[10px] text-slate-500 truncate">• {item}</div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-
-              {/* Law Rendering */}
-              {activeTab === 'laws' && lawArticles.map(l => (
-                 <div key={l.id} className="bg-[#12151c] border border-slate-800 p-6 rounded-3xl group hover:border-orange-500/50 transition-all">
-                  <div className="flex justify-between mb-2">
-                     <span className="text-xs font-black text-orange-500">{l.title}</span>
-                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setEditingLaw(l)} className="text-slate-500 hover:text-white"><Edit3 size={16}/></button>
-                      <button onClick={() => deleteItem('law', l.id)} className="text-slate-500 hover:text-red-500"><Trash2 size={16}/></button>
-                    </div>
-                  </div>
-                  <p className="text-xs text-slate-400 line-clamp-3 leading-relaxed">{l.content}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Posters Tab */}
-        {activeTab === 'posters' && (
-          <div className="space-y-6">
-             <button onClick={() => setShowPosterModal(true)} className="bg-orange-500 text-white px-6 py-3 rounded-xl text-xs font-bold w-full flex items-center justify-center gap-2">
-               <Upload size={16} /> 上传新海报模板 (背景图)
-             </button>
-             
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                {customPosters.map(p => (
-                  <div key={p.id} className="bg-[#12151c] border border-slate-800 rounded-3xl overflow-hidden group relative aspect-[3/4]">
-                    {(p.imageUrl || p.image_url) ? (
-                      <img
-                        src={p.imageUrl || p.image_url}
-                        className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity"
-                        alt={p.name}
-                        onError={(e) => {
-                          console.error('海报图片加载失败:', p.imageUrl || p.image_url);
-                          e.currentTarget.style.display = 'none';
-                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                        }}
-                      />
-                    ) : null}
-                    {!(p.imageUrl || p.image_url) && (
-                      <div className="w-full h-full flex items-center justify-center bg-slate-800">
-                        <div className="text-center">
-                          <ImageIcon size={32} className="text-slate-600 mx-auto mb-2" />
-                          <div className="text-xs text-slate-500">暂无图片</div>
-                        </div>
-                      </div>
-                    )}
-                    <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/90 to-transparent">
-                      <div className="font-bold text-white text-xs mb-1">{p.name}</div>
-                      <div className="text-[9px] text-slate-400">{p.createdAt ? new Date(p.createdAt).toLocaleDateString() : 'Invalid Date'}</div>
-                    </div>
-                    <button
-                      onClick={() => deleteItem('poster', p.id)}
-                      className="absolute top-2 right-2 p-2 bg-red-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-             </div>
-          </div>
-        )}
-
-        {/* Contact QR Tab */}
-        {activeTab === 'contact' && (
-          <div className="space-y-6">
-             <button onClick={() => setShowQRModal(true)} className="bg-orange-500 text-white px-6 py-3 rounded-xl text-xs font-bold w-full flex items-center justify-center gap-2">
-               <Plus size={16} /> 新增企业微信二维码 (支持多张轮询)
-             </button>
-             
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                {contactQRs.map(qr => (
-                  <div key={qr.id} className="bg-[#12151c] border border-slate-800 rounded-3xl p-4 flex flex-col items-center group relative">
-                    <div className="w-full aspect-square bg-white rounded-2xl p-2 mb-3">
-                       {(qr.imageUrl || qr.image_url) ? (
-                         <img
-                           src={qr.imageUrl || qr.image_url}
-                           className="w-full h-full object-contain"
-                           alt={qr.name}
-                           onError={(e) => {
-                             console.error('二维码图片加载失败:', qr.imageUrl || qr.image_url);
-                             e.currentTarget.style.display = 'none';
-                             e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                           }}
-                         />
-                       ) : null}
-                       {!(qr.imageUrl || qr.image_url) && (
-                         <div className="w-full h-full flex items-center justify-center bg-slate-100 rounded-xl">
-                           <div className="text-center">
-                             <Smartphone size={32} className="text-slate-400 mx-auto mb-2" />
-                             <div className="text-xs text-slate-500">暂无二维码</div>
-                           </div>
-                         </div>
-                       )}
-                    </div>
-                    <div className="text-center">
-                      <div className="font-bold text-white text-sm mb-1">{qr.name}</div>
-                      <div className="text-[9px] text-slate-500">上传于 {qr.createdAt ? new Date(qr.createdAt).toLocaleDateString() : 'Invalid Date'}</div>
-                    </div>
-                    <button
-                      onClick={() => deleteItem('qr', qr.id)}
-                      className="absolute top-2 right-2 p-2 bg-red-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-             </div>
-          </div>
-        )}
-
       </main>
 
-      {/* --- EDIT MODALS --- */}
-      
-      {/* Category Manager Modal */}
-      {showCatManager && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm animate-fade-in">
-           <div className="bg-[#12151c] w-full max-w-md rounded-[2rem] border border-slate-800 p-8 shadow-2xl">
-             <div className="flex justify-between items-center mb-6">
-                <h3 className="font-black text-white text-xl">业务分类管理</h3>
-                <button onClick={() => setShowCatManager(false)} className="text-slate-500 hover:text-white"><X size={20}/></button>
-             </div>
-             
-             <div className="flex gap-2 mb-6">
-                <input 
-                  value={newCatName}
-                  onChange={(e) => setNewCatName(e.target.value)}
-                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white"
-                  placeholder="新分类名称"
-                />
-                <button onClick={handleAddCategory} className="bg-orange-500 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap">添加</button>
-             </div>
-
-             <div className="space-y-2 max-h-60 overflow-y-auto no-scrollbar">
-                {categories.map(cat => (
-                  <div key={cat} className="flex justify-between items-center bg-white/5 px-4 py-3 rounded-xl border border-white/5">
-                     <span className="text-sm text-slate-300 font-bold">{cat}</span>
-                     {cat !== '全部' && (
-                        <button onClick={() => handleDeleteCategory(cat)} className="text-slate-600 hover:text-red-500 transition-colors">
-                           <Trash2 size={14} />
-                        </button>
-                     )}
-                  </div>
-                ))}
-             </div>
-           </div>
-        </div>
-      )}
-
-      {/* Company Add Modal */}
-      {showCompanyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm animate-fade-in">
-           <div className="bg-[#12151c] w-full max-w-md rounded-[2rem] border border-slate-800 p-8 shadow-2xl">
-             <div className="flex justify-between items-center mb-6">
-                <h3 className="font-black text-white text-xl">新增物业公司</h3>
-                <button onClick={() => setShowCompanyModal(false)} className="text-slate-500 hover:text-white"><X size={20}/></button>
-             </div>
-             
-             <div className="space-y-4">
-                <div className="space-y-2">
-                   <label className="text-xs text-slate-500 font-bold">公司/项目名称</label>
-                   <input 
-                     value={newCompanyName}
-                     onChange={(e) => setNewCompanyName(e.target.value)}
-                     className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500/50 outline-none"
-                     placeholder="例如：万科物业城市花园项目"
-                   />
-                </div>
-                <button onClick={handleAddCompany} className="w-full bg-orange-500 text-white px-4 py-3 rounded-xl text-xs font-bold">立即创建</button>
-             </div>
-           </div>
-        </div>
-      )}
-
-      {/* Poster Upload Modal */}
-      {showPosterModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm animate-fade-in">
-           <form onSubmit={handleSavePoster} className="bg-[#12151c] w-full max-w-md rounded-[2rem] border border-slate-800 p-8 shadow-2xl">
-             <h3 className="font-black text-white text-xl mb-6">上传海报背景</h3>
-             <div className="space-y-4">
-               <input 
-                 value={newPosterName} 
-                 onChange={e => setNewPosterName(e.target.value)} 
-                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white" 
-                 placeholder="模板名称 (如：节日促销)" 
-                 required 
-               />
-               
-               <div 
-                 onClick={() => posterFileRef.current?.click()}
-                 className="w-full aspect-[3/4] bg-slate-900 border border-dashed border-slate-700 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-800 transition-colors relative overflow-hidden"
-               >
-                 {newPosterImage ? (
-                   <img src={newPosterImage} className="w-full h-full object-cover absolute inset-0" alt="Preview" />
-                 ) : (
-                   <>
-                     <Upload size={24} className="text-slate-500 mb-2" />
-                     <span className="text-xs text-slate-500">点击选择图片</span>
-                   </>
-                 )}
-                 <input type="file" ref={posterFileRef} onChange={handlePosterImageUpload} className="hidden" accept="image/*" />
-               </div>
-             </div>
-             <div className="mt-6 flex gap-3">
-               <button type="button" onClick={() => setShowPosterModal(false)} className="flex-1 py-3 bg-slate-800 text-slate-500 rounded-xl text-xs font-bold">取消</button>
-               <button type="submit" className="flex-1 py-3 bg-orange-500 text-white rounded-xl text-xs font-bold">保存模板</button>
-             </div>
-           </form>
-        </div>
-      )}
-
-      {/* QR Upload Modal */}
-      {showQRModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm animate-fade-in">
-           <form onSubmit={handleSaveQR} className="bg-[#12151c] w-full max-w-md rounded-[2rem] border border-slate-800 p-8 shadow-2xl">
-             <h3 className="font-black text-white text-xl mb-6">配置咨询通道</h3>
-             <div className="space-y-4">
-               <input 
-                 value={newQRName} 
-                 onChange={e => setNewQRName(e.target.value)} 
-                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white" 
-                 placeholder="联系人名称 (如：值班律师A)" 
-                 required 
-               />
-               
-               <div 
-                 onClick={() => qrFileRef.current?.click()}
-                 className="w-full aspect-square bg-slate-900 border border-dashed border-slate-700 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-800 transition-colors relative overflow-hidden"
-               >
-                 {newQRImage ? (
-                   <img src={newQRImage} className="w-full h-full object-contain absolute inset-0 p-4" alt="Preview" />
-                 ) : (
-                   <>
-                     <Upload size={24} className="text-slate-500 mb-2" />
-                     <span className="text-xs text-slate-500">点击上传企业微信二维码</span>
-                   </>
-                 )}
-                 <input type="file" ref={qrFileRef} onChange={handleQRImageUpload} className="hidden" accept="image/*" />
-               </div>
-             </div>
-             <div className="mt-6 flex gap-3">
-               <button type="button" onClick={() => setShowQRModal(false)} className="flex-1 py-3 bg-slate-800 text-slate-500 rounded-xl text-xs font-bold">取消</button>
-               <button type="submit" className="flex-1 py-3 bg-orange-500 text-white rounded-xl text-xs font-bold">保存</button>
-             </div>
-           </form>
-        </div>
-      )}
-
-      {/* Risk Editor */}
-      {editingRisk && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <form onSubmit={handleSaveRisk} className="bg-[#12151c] w-full max-w-xl rounded-3xl border border-slate-800 p-8 shadow-2xl max-h-[80vh] overflow-y-auto">
-            <h3 className="font-black text-white text-xl mb-6">编辑自查场景</h3>
-            <div className="space-y-4">
-              <input value={editingRisk.title} onChange={e => setEditingRisk({...editingRisk, title: e.target.value})} className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white" placeholder="场景标题" required />
-              <div className="space-y-2">
-                 <label className="text-xs text-slate-500 font-bold">检查项 (每行一项)</label>
-                 <textarea 
-                   value={editingRisk.questions?.join('\n')} 
-                   onChange={e => setEditingRisk({...editingRisk, questions: e.target.value.split('\n')})} 
-                   className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 text-sm h-64 outline-none text-white" 
-                 />
-              </div>
-            </div>
-            <div className="mt-8 flex justify-end gap-3">
-              <button type="button" onClick={() => setEditingRisk(null)} className="px-6 py-2 rounded-xl text-xs font-bold text-slate-500">取消</button>
-              <button type="submit" className="bg-orange-500 text-white px-10 py-2 rounded-xl text-xs font-bold">保存</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Evidence Editor */}
-      {editingEvidence && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <form onSubmit={handleSaveEvidence} className="bg-[#12151c] w-full max-w-xl rounded-3xl border border-slate-800 p-8 shadow-2xl max-h-[80vh] overflow-y-auto">
-            <h3 className="font-black text-white text-xl mb-6">编辑取证清单</h3>
-            <div className="space-y-4">
-              <input value={editingEvidence.title} onChange={e => setEditingEvidence({...editingEvidence, title: e.target.value})} className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white" placeholder="清单标题" required />
-              <div className="space-y-2">
-                 <label className="text-xs text-slate-500 font-bold">所需证据 (每行一项)</label>
-                 <textarea 
-                   value={editingEvidence.items.join('\n')} 
-                   onChange={e => setEditingEvidence({...editingEvidence, items: e.target.value.split('\n')})} 
-                   className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 text-sm h-64 outline-none text-white" 
-                 />
-              </div>
-            </div>
-            <div className="mt-8 flex justify-end gap-3">
-              <button type="button" onClick={() => setEditingEvidence(null)} className="px-6 py-2 rounded-xl text-xs font-bold text-slate-500">取消</button>
-              <button type="submit" className="bg-orange-500 text-white px-10 py-2 rounded-xl text-xs font-bold">保存</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Law Editor */}
-      {editingLaw && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <form onSubmit={handleSaveLaw} className="bg-[#12151c] w-full max-w-xl rounded-3xl border border-slate-800 p-8 shadow-2xl">
-            <h3 className="font-black text-white text-xl mb-6">编辑法条</h3>
-            <div className="space-y-4">
-              <input value={editingLaw.title} onChange={e => setEditingLaw({...editingLaw, title: e.target.value})} className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white" placeholder="条款 (如：第九百四十四条)" required />
-              <textarea value={editingLaw.content} onChange={e => setEditingLaw({...editingLaw, content: e.target.value})} className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 text-sm h-64 outline-none text-white" placeholder="正文内容" required />
-            </div>
-            <div className="mt-8 flex justify-end gap-3">
-              <button type="button" onClick={() => setEditingLaw(null)} className="px-6 py-2 rounded-xl text-xs font-bold text-slate-500">取消</button>
-              <button type="submit" className="bg-orange-500 text-white px-10 py-2 rounded-xl text-xs font-bold">保存</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Doc Editor Reuse from Previous Logic */}
-      {editingDoc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <form onSubmit={handleSaveDoc} className="bg-[#12151c] w-full max-w-4xl rounded-[2.5rem] border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-             <div className="p-8 border-b border-slate-800 flex justify-between items-center">
-               <h3 className="font-black text-white text-xl">文书模版编辑器</h3>
-               <button type="button" onClick={() => setEditingDoc(null)} className="text-slate-500"><X size={24}/></button>
-             </div>
-             <div className="flex-1 overflow-y-auto p-10 space-y-6">
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-slate-500 uppercase">标题</label>
-                     <input
-                       value={editingDoc.title}
-                       onChange={e => setEditingDoc({...editingDoc, title: e.target.value})}
-                       className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500/50 outline-none transition-colors"
-                       placeholder="请输入文书标题"
-                       required
-                     />
-                  </div>
-                  <div className="space-y-2">
-                     <label className="text-[10px] font-bold text-slate-500 uppercase">分类</label>
-                     <select
-                       value={editingDoc.category}
-                       onChange={e => setEditingDoc({...editingDoc, category: e.target.value})}
-                       className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500/50 outline-none transition-colors"
-                     >
-                       {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                     </select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">描述</label>
-                  <textarea
-                    value={editingDoc.description}
-                    onChange={e => setEditingDoc({...editingDoc, description: e.target.value})}
-                    className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-300 focus:border-orange-500/50 outline-none transition-colors resize-none"
-                    placeholder="请输入文书简要描述，用于列表展示（建议50-100字）"
-                    rows={3}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">模版内容</label>
-                  <textarea
-                    value={editingDoc.content}
-                    onChange={e => setEditingDoc({...editingDoc, content: e.target.value})}
-                    className="w-full bg-black/40 border border-slate-800 rounded-2xl p-6 text-sm text-slate-300 font-mono h-80 outline-none focus:border-orange-500/50 transition-colors resize-none"
-                    placeholder="请输入文书模版内容，支持使用 {变量名} 格式的占位符"
-                    required
-                  />
-                </div>
-             </div>
-             <div className="p-8 border-t border-slate-800 flex justify-end">
-               <button
-                 type="submit"
-                 className="bg-orange-500 hover:bg-orange-600 text-white px-10 py-3 rounded-2xl font-black text-sm transition-colors"
-               >
-                 保存文书数据
-               </button>
-             </div>
-          </form>
-        </div>
-      )}
-
-      {/* User Editor (UPDATED: Company Select & Phone) */}
+      {/* User Editor Modal */}
       {editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-black/80 backdrop-blur-sm animate-fade-in">
           <form onSubmit={handleSaveUser} className="bg-[#12151c] w-full max-w-md rounded-[2rem] border border-slate-800 p-8 shadow-2xl relative overflow-hidden">
-             <h3 className="font-black text-white text-xl mb-8">账户管理</h3>
-             <div className="space-y-6">
-                <div className="space-y-2">
-                   <label className="text-xs text-slate-500 font-bold">工号/用户名</label>
-                   <input value={editingUser.username} onChange={e => setEditingUser({...editingUser, username: e.target.value})} className="w-full bg-black/40 border border-slate-800 rounded-xl py-4 px-4 text-sm text-white" placeholder="用户名" required />
-                </div>
-                <div className="space-y-2">
-                   <label className="text-xs text-slate-500 font-bold">手机号码 (登录/验证用)</label>
-                   <input value={editingUser.phone_number || ''} onChange={e => setEditingUser({...editingUser, phone_number: e.target.value})} className="w-full bg-black/40 border border-slate-800 rounded-xl py-4 px-4 text-sm text-white" placeholder="11位手机号" />
-                </div>
-                <div className="space-y-2">
-                   <label className="text-xs text-slate-500 font-bold">登录密码</label>
-                   <input value={editingUser.password} onChange={e => setEditingUser({...editingUser, password: e.target.value})} className="w-full bg-black/40 border border-slate-800 rounded-xl py-4 px-4 text-sm text-white" placeholder="密码" required />
-                </div>
-                
-                {/* 权限选择 */}
-                <div className="space-y-2">
-                   <label className="text-xs text-slate-500 font-bold">账号权限</label>
-                   <select value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value as any})} className="w-full bg-black/40 border border-slate-800 rounded-xl py-4 px-4 text-sm text-white">
-                        <option value={UserRole.USER}>普通员工</option>
-                        <option value={UserRole.ADMIN}>超级管理员</option>
-                   </select>
-                </div>
-
-                {/* 公司选择 (针对普通员工) */}
-                {editingUser.role === UserRole.USER && (
-                  <div className="space-y-2">
-                     <label className="text-xs text-slate-500 font-bold">所属物业公司</label>
-                     <select
-                       value={editingUser.enterprise_name || ''}
-                       onChange={e => setEditingUser({...editingUser, enterprise_name: e.target.value})}
-                       className="w-full bg-black/40 border border-slate-800 rounded-xl py-4 px-4 text-sm text-white focus:border-orange-500/50 outline-none"
-                       required
-                     >
-                        <option value="">-- 请选择 --</option>
-                        {enterprises.map(ent => (
-                           <option key={ent} value={ent}>{ent}</option>
-                        ))}
-                     </select>
-                     <div className="text-[10px] text-slate-600">
-                        提示：若找不到公司，请先在"物业公司管理"中创建。
-                     </div>
-                  </div>
-                )}
+             <h3 className="font-black text-white text-xl mb-6">账户管理</h3>
+             <div className="space-y-4">
+                <div className="space-y-1"><label className="text-xs text-slate-500 font-bold">用户名</label><input value={editingUser.username} onChange={e => setEditingUser({...editingUser, username: e.target.value})} className="w-full bg-black/40 border border-slate-800 rounded-xl py-3 px-4 text-sm text-white" required /></div>
+                <div className="space-y-1"><label className="text-xs text-slate-500 font-bold">手机号码</label><input value={editingUser.phoneNumber || ''} onChange={e => setEditingUser({...editingUser, phoneNumber: e.target.value})} className="w-full bg-black/40 border border-slate-800 rounded-xl py-3 px-4 text-sm text-white" /></div>
+                <div className="space-y-1"><label className="text-xs text-slate-500 font-bold">密码</label><input value={editingUser.password} onChange={e => setEditingUser({...editingUser, password: e.target.value})} className="w-full bg-black/40 border border-slate-800 rounded-xl py-3 px-4 text-sm text-white" required /></div>
+                <div className="space-y-1"><label className="text-xs text-slate-500 font-bold">角色权限</label><select value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value as any})} className="w-full bg-black/40 border border-slate-800 rounded-xl py-3 px-4 text-sm text-white"><option value={UserRole.ADMIN}>超级管理员 (系统后台)</option><option value={UserRole.EXECUTIVE}>物业高管/老板</option><option value={UserRole.MANAGER}>项目负责人</option><option value={UserRole.EMPLOYEE}>普通员工</option></select></div>
+                {editingUser.role !== UserRole.ADMIN && (<div className="space-y-1"><label className="text-xs text-slate-500 font-bold">所属公司</label><select value={editingUser.enterpriseName || ''} onChange={e => setEditingUser({...editingUser, enterpriseName: e.target.value})} className="w-full bg-black/40 border border-slate-800 rounded-xl py-3 px-4 text-sm text-white" required><option value="">-- 请选择 --</option>{enterprises.map(ent => (<option key={ent} value={ent}>{ent}</option>))}</select></div>)}
              </div>
-             <div className="mt-8 flex gap-3">
-               <button type="button" onClick={() => setEditingUser(null)} className="flex-1 py-4 rounded-xl text-xs font-black bg-slate-800 text-slate-500">取消</button>
-               <button type="submit" className="flex-1 bg-orange-500 text-white py-4 rounded-xl text-xs font-black">保存</button>
-             </div>
+             <div className="mt-8 flex gap-3"><button type="button" onClick={() => setEditingUser(null)} className="flex-1 py-3 rounded-xl text-xs font-black bg-slate-800 text-slate-500 hover:text-white transition-colors">取消</button><button type="submit" className="flex-1 bg-orange-500 text-white py-3 rounded-xl text-xs font-black hover:bg-orange-600 transition-colors">保存</button></div>
           </form>
         </div>
       )}

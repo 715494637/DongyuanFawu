@@ -1,23 +1,22 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Bot, User, Volume2, Globe, Sparkles } from 'lucide-react';
+import { Send, Bot, User, Volume2, Globe, Sparkles, Headphones } from 'lucide-react';
 import { ChatMessage } from '../types';
 import { sendMessageToAI, textToSpeech, decodeAudioData } from '../services/geminiService';
-import { api } from '../services/apiService';
+import ConsultationModal from '../components/ConsultationModal';
+import { db } from '../services/dbService';
 
 const AIChat: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '0',
-      role: 'model',
-      text: '您好！我是东元物业法务助手。我可以为您提供《民法典》咨询、文书草拟及风险建议。（回答仅供参考）',
-      timestamp: Date.now()
-    }
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const config = db.getSystemConfig();
+    const welcomeText = config.welcomeMessage || '您好！我是东元物业法务助手。我可以为您提供《民法典》咨询、文书草拟及风险建议。（回答仅供参考）';
+    return [{ id: '0', role: 'model', text: welcomeText, timestamp: Date.now() }];
+  });
   
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [useSearch, setUseSearch] = useState(true);
+  const [showConsult, setShowConsult] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
 
@@ -30,10 +29,20 @@ const AIChat: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }, [messages]);
 
   useEffect(() => {
+    // 1. Check for Pending Search (from RightsCenter etc.)
     const pendingSearch = localStorage.getItem('dy_pending_search');
     if (pendingSearch) {
       handleSend(pendingSearch);
       localStorage.removeItem('dy_pending_search');
+      return; 
+    }
+
+    // 2. Check for Report Context (from HealthCheck)
+    const reportContext = localStorage.getItem('dy_report_context');
+    if (reportContext) {
+      // Automatically send the report context to AI to start the conversation
+      handleSend(reportContext);
+      localStorage.removeItem('dy_report_context');
     }
   }, []);
 
@@ -68,7 +77,8 @@ const AIChat: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     setLoading(true);
 
     try {
-      const responseText = await sendMessageToAI(userMsg.text, useSearch);
+      // Use Pro model implicitly by isComplex flag if needed, but here simple search toggle is enough for general chat
+      const responseText = await sendMessageToAI(userMsg.text, useSearch, true); // defaulting to 'complex' mode for better chat quality
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
@@ -140,22 +150,29 @@ const AIChat: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       </div>
 
       <div className="p-4 bg-white border-t border-gray-100 space-y-3">
-        <div className="flex justify-end">
-           <button
+        {/* Level 3 Funnel: Connect to Human */}
+        <div className="flex items-center justify-between px-2">
+           <button 
+             className="text-[10px] font-bold text-slate-500 flex items-center gap-1 hover:text-orange-600 transition-colors"
+             onClick={() => setShowConsult(true)}
+           >
+             <Headphones size={12} /> 转人工咨询
+           </button>
+           <button 
              onClick={() => setUseSearch(!useSearch)}
              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold transition-all ${useSearch ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-400'}`}
            >
              <Globe size={12} /> {useSearch ? '已开启实时检索' : '仅本地知识库'}
            </button>
         </div>
-
+        
         <div className="flex items-center gap-2 bg-gray-50 px-4 py-3 rounded-2xl border border-gray-200 focus-within:border-orange-500/50 focus-within:ring-4 focus-within:ring-orange-500/5 transition-all">
           <input 
             type="text" 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="描述您的问题，如：业主停交物业费如何起诉？"
+            placeholder="描述您的问题..."
             className="flex-1 bg-transparent outline-none text-sm text-gray-800 placeholder-gray-400 font-medium"
           />
           <button 
@@ -169,10 +186,11 @@ const AIChat: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         
         {/* Footer Disclaimer */}
         <p className="text-center text-[9px] text-gray-300 transform scale-90">
-           AI 辅助生成内容仅供参考，不构成正式法律意见。如遇复杂争议，建议咨询人工律师。
+           AI 辅助生成内容仅供参考，不构成正式法律意见。
         </p>
       </div>
 
+      <ConsultationModal isOpen={showConsult} onClose={() => setShowConsult(false)} />
     </div>
   );
 };
