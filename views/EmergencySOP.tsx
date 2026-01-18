@@ -1,19 +1,42 @@
 
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Clock, CheckCircle2, ChevronRight, PhoneCall } from 'lucide-react';
-import { db } from '../services/dbService';
-import { EmergencySOP as SOPType } from '../types';
+import { api } from '../services/apiService';
+
+interface SOP {
+  id: string;
+  title: string;
+  category?: string;
+  content?: string;
+  steps?: string[];
+  tips?: string;
+  is_active: boolean;
+}
 
 const EmergencySOP: React.FC = () => {
-  const [sops, setSops] = useState<SOPType[]>([]);
-  const [activeSop, setActiveSop] = useState<SOPType | null>(null);
+  const [sops, setSops] = useState<SOP[]>([]);
+  const [activeSop, setActiveSop] = useState<SOP | null>(null);
   const [step, setStep] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setSops(db.getSOPs());
+    const loadSOPs = async () => {
+      try {
+        setLoading(true);
+        const data = await api.getSOPs();
+        setSops(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('加载应急预案失败:', err);
+        setSops([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadSOPs();
   }, []);
 
   if (activeSop) {
+    const steps = activeSop.steps || [];
     return (
         <div className="flex flex-col h-full bg-red-50 animate-fade-in p-6 pb-24">
             <div className="flex items-center justify-between mb-8">
@@ -27,10 +50,10 @@ const EmergencySOP: React.FC = () => {
             <div className="flex-1">
                 <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl border-2 border-red-100 relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-5"><AlertTriangle size={100}/></div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase mb-4">当前步骤 {step + 1} / {activeSop.steps.length}</div>
-                    
+                    <div className="text-[10px] text-slate-400 font-bold uppercase mb-4">当前步骤 {step + 1} / {steps.length}</div>
+
                     <div className="text-xl font-black text-slate-800 leading-normal mb-8 min-h-[80px]">
-                        {activeSop.steps[step]}
+                        {steps[step] || activeSop.content}
                     </div>
 
                     {step === 0 && (
@@ -40,19 +63,21 @@ const EmergencySOP: React.FC = () => {
                         </div>
                     )}
 
-                    <button 
-                        onClick={() => setStep(prev => Math.min(prev + 1, activeSop.steps.length - 1))}
-                        disabled={step === activeSop.steps.length - 1}
+                    <button
+                        onClick={() => setStep(prev => Math.min(prev + 1, steps.length - 1))}
+                        disabled={step === steps.length - 1}
                         className="w-full py-5 bg-red-500 text-white rounded-2xl font-black text-lg shadow-xl shadow-red-500/30 active:scale-95 transition-all disabled:opacity-50 disabled:bg-slate-300"
                     >
-                        {step === activeSop.steps.length - 1 ? '处置完毕' : '已完成，下一步'}
+                        {step === steps.length - 1 ? '处置完毕' : '已完成，下一步'}
                     </button>
                 </div>
-                
-                <div className="mt-6 p-6 bg-yellow-50 rounded-3xl border border-yellow-100 text-yellow-800">
-                    <h4 className="font-black text-xs uppercase mb-2 flex items-center gap-2"><AlertTriangle size={14}/> 法律禁忌 (DON'T)</h4>
-                    <p className="text-xs font-medium leading-relaxed">{activeSop.tips}</p>
-                </div>
+
+                {activeSop.tips && (
+                    <div className="mt-6 p-6 bg-yellow-50 rounded-3xl border border-yellow-100 text-yellow-800">
+                        <h4 className="font-black text-xs uppercase mb-2 flex items-center gap-2"><AlertTriangle size={14}/> 法律禁忌 (DON'T)</h4>
+                        <p className="text-xs font-medium leading-relaxed">{activeSop.tips}</p>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -67,26 +92,32 @@ const EmergencySOP: React.FC = () => {
         <p className="text-[10px] text-red-100 opacity-80 uppercase tracking-widest">红按钮 · 傻瓜式操作 · 法律避雷</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
-        {sops.map(s => (
-            <button 
+      {loading ? (
+        <div className="text-center text-slate-400 py-8">加载中...</div>
+      ) : sops.length === 0 ? (
+        <div className="text-center text-slate-400 py-8">暂无应急预案</div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {sops.map(s => (
+              <button
                 key={s.id}
                 onClick={() => setActiveSop(s)}
                 className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 flex items-center justify-between active:scale-[0.98] transition-all hover:border-red-200 group"
-            >
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 group-hover:bg-red-500 group-hover:text-white transition-colors">
-                        <AlertTriangle size={24}/>
-                    </div>
-                    <div className="text-left">
-                        <h4 className="font-black text-slate-800">{s.title}</h4>
-                        <span className="inline-block mt-1 px-2 py-0.5 bg-red-100 text-red-600 text-[9px] font-black rounded uppercase">High Risk</span>
-                    </div>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><ChevronRight size={16} className="text-slate-400"/></div>
-            </button>
-        ))}
-      </div>
+              >
+                  <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 group-hover:bg-red-500 group-hover:text-white transition-colors">
+                          <AlertTriangle size={24}/>
+                      </div>
+                      <div className="text-left">
+                          <h4 className="font-black text-slate-800">{s.title}</h4>
+                          <span className="inline-block mt-1 px-2 py-0.5 bg-red-100 text-red-600 text-[9px] font-black rounded uppercase">High Risk</span>
+                      </div>
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><ChevronRight size={16} className="text-slate-400"/></div>
+              </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

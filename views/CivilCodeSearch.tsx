@@ -1,15 +1,28 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, BookOpen, Bookmark } from 'lucide-react';
-import { db } from '../services/dbService';
+import { cachedApi } from '../services/apiService';
 import { LawArticle } from '../types';
 
 const CivilCodeSearch: React.FC = () => {
   const [query, setQuery] = useState('');
   const [articles, setArticles] = useState<LawArticle[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setArticles(db.getCivilCode());
+    const fetchArticles = async () => {
+      try {
+        // 使用带缓存的 API（法条数据变化少，30分钟缓存）
+        const data = await cachedApi.getCivilCode();
+        setArticles(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('获取民法典条文失败:', err);
+        setArticles([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchArticles();
   }, []);
   
   const filtered = articles.filter(a => 

@@ -68,7 +68,7 @@ export interface VipRight {
 export interface SpecialProject {
   id: string;
   title: string;
-  desc: string;
+  description: string;
 }
 
 export interface ServiceRequest {
@@ -76,9 +76,11 @@ export interface ServiceRequest {
   userId: string;
   username: string;
   enterpriseName: string;
-  requestType: 'ADD_PROJECT' | 'OTHER';
+  requestType: 'ADD_PROJECT' | 'SELECT_PROJECT' | 'OTHER';
+  title: string;
   content: string;
   status: 'PENDING' | 'PROCESSED' | 'REJECTED';
+  priority?: string;
   timestamp: number;
 }
 

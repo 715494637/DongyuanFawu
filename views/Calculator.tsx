@@ -1,20 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { Share2, Download, RefreshCw, Calculator as CalcIcon } from 'lucide-react';
-import { db } from '../services/dbService';
 
 const Calculator: React.FC = () => {
   const [principal, setPrincipal] = useState<string>('');
   const [rate, setRate] = useState<string>('0.05'); // 默认万五
   const [days, setDays] = useState<string>('');
-  
+
   const [result, setResult] = useState<{penalty: number, total: number} | null>(null);
   const [showLetter, setShowLetter] = useState(false);
   const [letterType, setLetterType] = useState<'gentle' | 'severe'>('gentle');
-
-  useEffect(() => {
-      db.logUsage('CALCULATOR', '催费计算器');
-  }, []);
 
   const handleCalculate = () => {
     const p = parseFloat(principal);

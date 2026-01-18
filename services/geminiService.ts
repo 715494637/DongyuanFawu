@@ -1,9 +1,9 @@
 
 import { GoogleGenAI, Modality } from "@google/genai";
-import { db } from "./dbService";
+import { api } from "./apiService";
 
-const getSystemInstruction = () => {
-  const kb = db.getAIKB();
+const getSystemInstruction = async () => {
+  const kb = await api.getAIKB();
   return `
 你现在是“东元物业法务助手”（智能辅助工具，非人类律师）。
 身份定位：你是一个辅助物业经理进行法律决策的智能助手。
@@ -28,11 +28,12 @@ export const sendMessageToAI = async (message: string, useSearch: boolean = fals
   const modelName = isComplex ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
   
   try {
+    const systemInstruction = await getSystemInstruction();
     const response = await ai.models.generateContent({
       model: modelName,
       contents: message,
       config: {
-        systemInstruction: getSystemInstruction(),
+        systemInstruction: systemInstruction,
         tools: useSearch ? [{ googleSearch: {} }] : undefined,
       },
     });

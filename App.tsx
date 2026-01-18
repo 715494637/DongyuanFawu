@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ViewState, User, UserRole } from './types';
-import { db } from './services/dbService';
+import { api, cachedApi } from './services/apiService';
 import Layout from './components/Layout';
 import Home from './views/Home';
 import Calculator from './views/Calculator';
@@ -26,43 +25,121 @@ import EmergencySOP from './views/EmergencySOP';
 import LawyerVideo from './views/LawyerVideo';
 import RightsCenter from './views/RightsCenter';
 import LegalHealthCheck from './views/LegalHealthCheck';
+import { PreloadProvider, preloadLoginData } from './views/PreloadContext';
+import { PreloadData } from './views/PreloadContext';
+import { CacheProvider } from './services/DataCacheContext';
 
 const App: React.FC = () => {
   const [showSplash, setShowSplash] = useState(() => {
-      // Safe sync check for splash config
       try {
           const stored = localStorage.getItem('dy_system_config');
           if (stored) {
               const cfg = JSON.parse(stored);
-              return cfg.enableSplashScreen !== false; // Default true
+              return cfg.enableSplashScreen !== false;
           }
       } catch(e) {}
       return true;
   });
-  
+
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.HOME);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // 预加载登录数据（在开屏期间并行请求）
+  const [preloadedData, setPreloadedData] = useState<PreloadData | null>(null);
+
   useEffect(() => {
-    // 1. 初始化数据库
-    db.init();
-    
-    // 2. 检查会话持久化 (Auto Login)
-    const sessionId = db.getSession();
-    if (sessionId) {
-      const savedUser = db.getUserById(sessionId);
-      if (savedUser) {
-        setUser(savedUser);
-        if (savedUser.role === UserRole.ADMIN) {
-          setCurrentView(ViewState.ADMIN_DASHBOARD);
-        } else {
-          setCurrentView(ViewState.HOME);
+    const startPreload = async () => {
+      try {
+        const data = await preloadLoginData();
+        setPreloadedData(data);
+      } catch (err) {
+        console.error('预加载登录数据失败:', err);
+      }
+    };
+    startPreload();
+  }, []);
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (token) {
+        try {
+          // 强制刷新用户数据（绕过缓存）以获取最新的 quota 信息
+          const userData = await cachedApi.getCurrentUserWithoutCache(token);
+          const savedUser: User = {
+            id: userData.id,
+            username: userData.username,
+            phoneNumber: userData.phone_number,
+            role: (userData.role as string)?.toUpperCase() as UserRole,
+            enterpriseName: userData.enterprise_name,
+            isCertified: userData.is_certified,
+            approvalStatus: userData.approval_status,
+            quota: userData.quota || { lawyerLetters: 0, consultations: 0 },
+            selectedProjects: userData.selected_projects || []
+          };
+          setUser(savedUser);
+          if (savedUser.role === UserRole.ADMIN) {
+            setCurrentView(ViewState.ADMIN_DASHBOARD);
+          } else {
+            setCurrentView(ViewState.HOME);
+          }
+        } catch (err) {
+          console.error('获取当前用户失败:', err);
+          // Token 无效，清除存储
+          localStorage.removeItem('token');
+          sessionStorage.removeItem('token');
         }
       }
-    }
+    };
+    checkSession();
+  }, []);
 
-    // 3. 设置开屏页显示时间 (2.5秒)
+  // 监听管理员修改额度后的跨标签页刷新事件
+  useEffect(() => {
+    let isMounted = true;
+
+    const handleQuotaUpdated = async () => {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (!token || !isMounted) return;
+      try {
+        // 绕过缓存获取最新用户数据
+        const userData = await cachedApi.getCurrentUserWithoutCache(token);
+        if (!isMounted) return;
+        const updatedUser: User = {
+          id: userData.id,
+          username: userData.username,
+          phoneNumber: userData.phone_number,
+          role: (userData.role as string)?.toUpperCase() as UserRole,
+          enterpriseName: userData.enterprise_name,
+          isCertified: userData.is_certified,
+          approvalStatus: userData.approval_status,
+          quota: userData.quota || { lawyerLetters: 0, consultations: 0 },
+          selectedProjects: userData.selected_projects || []
+        };
+        setUser(updatedUser);
+      } catch (err) {
+        console.error('刷新用户额度失败:', err);
+      }
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'quota-updated') {
+        handleQuotaUpdated();
+      }
+    };
+
+    window.addEventListener('quota-updated', handleQuotaUpdated);
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('quota-updated', handleQuotaUpdated);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
+  useEffect(() => {
     if (showSplash) {
         const timer = setTimeout(() => {
           setShowSplash(false);
@@ -71,7 +148,6 @@ const App: React.FC = () => {
     }
   }, [showSplash]);
 
-  // 监听视图变化，自动回滚到顶部
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = 0;
@@ -79,9 +155,24 @@ const App: React.FC = () => {
   }, [currentView]);
 
   const handleLogin = (loggedInUser: User, remember: boolean) => {
-    setUser(loggedInUser);
-    db.setSession(loggedInUser.id, remember); // 根据用户选择保存会话
-    if (loggedInUser.role === UserRole.ADMIN) {
+    // 确保 role 类型正确（后端可能返回小写的 'admin'）
+    const normalizedUser: User = {
+      ...loggedInUser,
+      role: (loggedInUser.role as string)?.toUpperCase() as UserRole
+    };
+    setUser(normalizedUser);
+    // 保存用户到 dbService（用于跨页面共享用户状态）
+    const users = db.getUsers();
+    const existingIndex = users.findIndex(u => u.id === normalizedUser.id);
+    if (existingIndex >= 0) {
+      users[existingIndex] = normalizedUser;
+    } else {
+      users.push(normalizedUser);
+    }
+    db.saveUsers(users);
+    // 保存会话 ID
+    db.setSession(normalizedUser.id, remember);
+    if (normalizedUser.role === UserRole.ADMIN) {
       setCurrentView(ViewState.ADMIN_DASHBOARD);
     } else {
       setCurrentView(ViewState.HOME);
@@ -90,26 +181,27 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     setUser(null);
-    db.clearSession(); // 清除会话
+    db.clearSession();
     setCurrentView(ViewState.HOME);
   };
 
-  // 1. 优先显示开屏页
   if (showSplash) {
-    return <SplashScreen />;
+    return <SplashScreen customImage={preloadedData?.splashImage ?? undefined} />;
   }
 
-  // 2. 显示登录页 (如果没有用户且不在开屏)
   if (!user) {
-    return <Login onLogin={handleLogin} />;
+    return (
+      <PreloadProvider initialData={preloadedData}>
+        <Login onLogin={handleLogin} />
+      </PreloadProvider>
+    );
   }
 
-  // 3. 显示管理员后台
-  if (user.role === UserRole.ADMIN && currentView === ViewState.ADMIN_DASHBOARD) {
+  // 管理员始终显示后台管理页面
+  if (user.role === UserRole.ADMIN) {
     return <AdminDashboard onLogout={handleLogout} />;
   }
 
-  // 4. 显示主应用视图
   const renderView = () => {
     switch (currentView) {
       case ViewState.HOME:
@@ -138,15 +230,14 @@ const App: React.FC = () => {
         return <AIDocGen />;
       case ViewState.MY_ENTERPRISE:
         return (
-          <Profile 
-            user={user} 
-            setUser={setUser} 
-            onLogout={handleLogout} 
+          <Profile
+            user={user}
+            setUser={setUser}
+            onLogout={handleLogout}
           />
         );
       case ViewState.COLLECTION_CRM:
         return <CollectionHelper />;
-      // LAW_EYE_CAMERA REMOVED
       case ViewState.RENOVATION_CHECK:
         return <RenovationCheck />;
       case ViewState.SCRIPT_KIT:
@@ -165,9 +256,13 @@ const App: React.FC = () => {
   };
 
   return (
-    <Layout currentView={currentView} setCurrentView={setCurrentView} scrollRef={scrollRef}>
-      {renderView()}
-    </Layout>
+    <CacheProvider>
+      <PreloadProvider initialData={preloadedData}>
+        <Layout currentView={currentView} setCurrentView={setCurrentView} scrollRef={scrollRef}>
+          {renderView()}
+        </Layout>
+      </PreloadProvider>
+    </CacheProvider>
   );
 };
 

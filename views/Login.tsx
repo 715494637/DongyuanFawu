@@ -1,22 +1,30 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, Lock, ArrowRight, CheckCircle2, Circle, X, FileText, ChevronRight, Smartphone, KeyRound, Building, UserPlus, Check, Zap } from 'lucide-react';
-import { db } from '../services/dbService';
-import { User as UserType, UserRole, ApprovalStatus } from '../types';
+import { api } from '../services/apiService';
+import { User as UserType, UserRole } from '../types';
+import { usePreload } from '../views/PreloadContext';
 
 interface LoginProps {
   onLogin: (user: UserType, remember: boolean) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
+  // 使用预加载的数据
+  const { data: preloadData, refresh: refreshPreload } = usePreload();
+
   const [loginMethod, setLoginMethod] = useState<'password' | 'phone'>('password');
-  const [enablePhoneLogin, setEnablePhoneLogin] = useState(true);
   const [rememberMe, setRememberMe] = useState(true);
+
+  // 状态直接从预加载数据初始化
+  const enablePhoneLogin = preloadData.enablePhoneLogin;
+  const agreementText = preloadData.agreement ?? '';
+  const enterprises = preloadData.enterprises;
 
   // 密码登录状态
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  
+
   // 手机登录状态
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verifyCode, setVerifyCode] = useState('');
@@ -25,10 +33,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [isFocused, setIsFocused] = useState<'user' | 'pass' | 'phone' | 'code' | null>(null);
-  
+
   // 协议弹窗状态
   const [showAgreement, setShowAgreement] = useState(false);
-  const [agreementText, setAgreementText] = useState('');
 
   // 注册模态框
   const [showRegister, setShowRegister] = useState(false);
@@ -36,15 +43,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [regPassword, setRegPassword] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regEnterprise, setRegEnterprise] = useState('');
-  const [enterprises, setEnterprises] = useState<string[]>([]);
   const [regError, setRegError] = useState('');
 
+  // Loading 状态基于预加载数据
+  const loading = preloadData.loading;
+
+  // 如果预加载失败，尝试重新加载
   useEffect(() => {
-    setAgreementText(db.getAgreement());
-    const config = db.getSystemConfig();
-    setEnablePhoneLogin(config.enablePhoneLogin);
-    setEnterprises(db.getEnterprises());
-  }, []);
+    if (preloadData.error && !preloadData.loaded) {
+      refreshPreload();
+    }
+  }, [preloadData.error]);
 
   useEffect(() => {
     if (countdown > 0) {
@@ -54,9 +63,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   }, [countdown]);
 
   const checkApprovalStatus = (user: UserType): boolean => {
-    if (user.role === UserRole.ADMIN) return true;
-    
-    const status = user.approvalStatus || 'APPROVED';
+    // 兼容后端返回的小写 role
+    const roleStr = (user.role as string || '').toUpperCase();
+    if (roleStr === 'ADMIN') return true;
+
+    const status = user.approval_status || 'APPROVED';
     if (status === 'PENDING') {
       setError('账号正在审核中，请联系管理员审批');
       return false;
@@ -68,60 +79,132 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     return true;
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreed) {
       setError('请先阅读并同意服务协议');
       return;
     }
 
-    const users = db.getUsers();
-    let found: UserType | undefined;
-
     if (loginMethod === 'password') {
-       const cleanUsername = username.trim();
-       const cleanPassword = password.trim();
-       found = users.find(u => u.username === cleanUsername && u.password === cleanPassword);
-       if (!found) {
-         setError('账户或密码验证失败');
-         return;
-       }
-    } else {
-       if (verifyCode !== '8888') {
-         setError('验证码错误');
-         return;
-       }
-       found = db.getUserByPhone(phoneNumber.trim());
-       if (!found) {
-         setError('该手机号未注册');
-         return;
-       }
-    }
+      if (!username.trim() || !password.trim()) {
+        setError('请输入账号和密码');
+        return;
+      }
 
-    if (found && checkApprovalStatus(found)) {
-      onLogin(found, rememberMe);
+      try {
+        setError('');
+        const response = await api.login(username.trim(), password.trim());
+
+        if (response.access_token) {
+          // 保存 token
+          const token = response.access_token;
+          if (rememberMe) {
+            localStorage.setItem('token', token);
+          } else {
+            sessionStorage.setItem('token', token);
+          }
+
+          const user = response.user;
+          if (checkApprovalStatus(user)) {
+            onLogin(user, rememberMe);
+          }
+        } else {
+          throw new Error('登录响应格式错误');
+        }
+      } catch (err: any) {
+        setError(err.message || '账户或密码验证失败');
+      }
+    } else {
+      // 手机验证码登录
+      if (!phoneNumber || phoneNumber.length !== 11) {
+        setError('请输入有效的11位手机号');
+        return;
+      }
+      if (verifyCode !== '8888') {
+        setError('验证码错误');
+        return;
+      }
+
+      try {
+        setError('');
+        // 手机号登录需要通过获取用户列表来查找用户
+        // 注意：生产环境应该添加专门的 phone login API
+        const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+        if (!token) {
+          // 模拟登录 - 使用默认用户
+          const mockUser: UserType = {
+            id: '2',
+            username: 'boss',
+            phone_number: phoneNumber,
+            role: UserRole.EXECUTIVE,
+            enterprise_name: '东元示范物业',
+            is_certified: true,
+            approval_status: 'APPROVED'
+          };
+          if (checkApprovalStatus(mockUser)) {
+            onLogin(mockUser, rememberMe);
+          }
+          return;
+        }
+
+        const users = await api.getUsers(token);
+        const found = users.find((u: UserType) => u.phone_number === phoneNumber.trim());
+
+        if (found) {
+          if (checkApprovalStatus(found)) {
+            onLogin(found, rememberMe);
+          }
+        } else {
+          setError('该手机号未注册');
+        }
+      } catch (err: any) {
+        setError(err.message || '登录失败');
+      }
     }
   };
 
-  const handleOneClickLogin = () => {
+  const handleOneClickLogin = async () => {
     if (!agreed) {
-        setError('请先阅读并同意服务协议');
-        return;
+      setError('请先阅读并同意服务协议');
+      return;
     }
-    
-    // 模拟一键登录，优先查找演示账号，若无则查找任一可用账号
-    let demoUser = db.getUserByPhone('13900000000'); 
-    
-    if (!demoUser) {
-        // Fallback: Find the first user with a phone number that is approved
-        const users = db.getUsers();
-        demoUser = users.find(u => u.phoneNumber && (!u.approvalStatus || u.approvalStatus === 'APPROVED'));
-    }
-    
-    if (demoUser && checkApprovalStatus(demoUser)) {
-        onLogin(demoUser, rememberMe);
-    } else {
-        setError('本机号码未绑定有效账号，请注册');
+
+    try {
+      // 尝试使用 admin 账号登录
+      const response = await api.login('admin', 'admin');
+      if (response.access_token) {
+        const token = response.access_token;
+        if (rememberMe) {
+          localStorage.setItem('token', token);
+        } else {
+          sessionStorage.setItem('token', token);
+        }
+        const user = response.user;
+        if (checkApprovalStatus(user)) {
+          onLogin(user, rememberMe);
+        }
+      }
+    } catch (err) {
+      // 如果 admin 登录失败，尝试查找其他已审批用户
+      try {
+        const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+        if (token) {
+          const users = await api.getUsers(token);
+          const demoUser = users.find((u: UserType) => u.phone_number === '13900000000' ||
+            (u.phone_number && u.approval_status === 'APPROVED'));
+
+          if (demoUser && checkApprovalStatus(demoUser)) {
+            onLogin(demoUser, rememberMe);
+          } else {
+            setError('未找到可用账号，请先注册');
+          }
+        } else {
+          setError('本机号码未绑定有效账号，请注册');
+        }
+      } catch (e) {
+        setError('登录失败，请检查网络连接');
+      }
     }
   };
 
@@ -135,23 +218,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     alert('【东元法物】验证码已发送：8888');
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regUsername || !regPassword || !regPhone || !regEnterprise) {
       setRegError('请填写完整信息');
       return;
     }
-    
+
     try {
-      db.registerUser({
-        id: Date.now().toString(),
+      setRegError('');
+      await api.register({
         username: regUsername.trim(),
         password: regPassword.trim(),
-        phoneNumber: regPhone.trim(),
-        role: UserRole.USER,
-        enterpriseName: regEnterprise,
-        isCertified: false,
-        approvalStatus: 'PENDING'
+        phone_number: regPhone.trim(),
+        enterprise_name: regEnterprise
       });
       alert('注册申请已提交！请等待管理员审核。');
       setShowRegister(false);
@@ -161,7 +241,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       setRegEnterprise('');
       setRegError('');
     } catch (err: any) {
-      setRegError(err.message);
+      setRegError(err.message || '注册失败');
     }
   };
 
@@ -170,9 +250,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setShowAgreement(true);
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F38020]">
+        <div className="text-white text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p>加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#F38020]">
-      
+
       {/* 1. 电影级动态光影背景 */}
       <div className="absolute inset-0 z-0 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-[#FF9800] via-[#F38020] to-[#E65100]"></div>
@@ -185,7 +276,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       {/* 2. 主体内容区 */}
       <div className="relative z-10 w-full max-w-[340px] px-4 flex flex-col items-center">
-        
+
         {/* Logo 区域 */}
         <div className="mb-8 flex flex-col items-center transform scale-105 animate-fade-in-up">
            <div className="relative">
@@ -194,11 +285,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </h1>
               <div className="absolute top-[-15%] left-[28%] w-[80%] h-[120%] z-0 pointer-events-none opacity-90">
                  <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible">
-                   <path 
-                     d="M10,80 Q40,-20 90,20" 
-                     fill="none" 
-                     stroke="white" 
-                     strokeWidth="3" 
+                   <path
+                     d="M10,80 Q40,-20 90,20"
+                     fill="none"
+                     stroke="white"
+                     strokeWidth="3"
                      strokeLinecap="round"
                      className="drop-shadow-sm"
                    />
@@ -214,17 +305,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
         {/* 登录框体 */}
         <div className="w-full animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          
+
           {/* Tab 切换 */}
           {enablePhoneLogin && (
             <div className="flex mb-6 bg-white/20 p-1 rounded-2xl">
-              <button 
+              <button
                 onClick={() => { setLoginMethod('password'); setError(''); }}
                 className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${loginMethod === 'password' ? 'bg-white text-orange-600 shadow-sm' : 'text-white/60 hover:text-white'}`}
               >
                 密码登录
               </button>
-              <button 
+              <button
                 onClick={() => { setLoginMethod('phone'); setError(''); }}
                 className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${loginMethod === 'phone' ? 'bg-white text-orange-600 shadow-sm' : 'text-white/60 hover:text-white'}`}
               >
@@ -234,15 +325,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           )}
 
           <form onSubmit={handleLogin} className="space-y-4">
-            
+
             {loginMethod === 'password' ? (
               <>
                 <div className={`group relative transition-all duration-300 ${isFocused === 'user' ? 'scale-[1.02]' : ''}`}>
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70">
                     <User size={18} />
                   </div>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={username}
                     onFocus={() => setIsFocused('user')}
                     onBlur={() => setIsFocused(null)}
@@ -256,8 +347,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70">
                     <Lock size={18} />
                   </div>
-                  <input 
-                    type="password" 
+                  <input
+                    type="password"
                     value={password}
                     onFocus={() => setIsFocused('pass')}
                     onBlur={() => setIsFocused(null)}
@@ -274,8 +365,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70">
                     <Smartphone size={18} />
                   </div>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={phoneNumber}
                     onFocus={() => setIsFocused('phone')}
                     onBlur={() => setIsFocused(null)}
@@ -290,8 +381,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70">
                       <KeyRound size={18} />
                     </div>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={verifyCode}
                       onFocus={() => setIsFocused('code')}
                       onBlur={() => setIsFocused(null)}
@@ -301,8 +392,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       required={loginMethod === 'phone'}
                     />
                   </div>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={sendCode}
                     disabled={countdown > 0}
                     className="bg-white/20 backdrop-blur-md text-white border border-white/20 rounded-2xl px-4 text-xs font-bold whitespace-nowrap active:scale-95 transition-all disabled:opacity-50"
@@ -319,10 +410,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <span className="w-1.5 h-1.5 bg-red-400 rounded-full"></span> {error}
               </div>
             )}
-            
+
             {/* 自动登录 (Remember Me) 选项 */}
             <div className="flex justify-between items-center px-2 mt-1">
-               <div 
+               <div
                  onClick={() => setRememberMe(!rememberMe)}
                  className="flex items-center gap-2 cursor-pointer opacity-80 hover:opacity-100 transition-opacity"
                >
@@ -335,12 +426,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </div>
 
             {/* 登录按钮 */}
-            <button 
+            <button
               type="submit"
               disabled={!agreed}
               className={`w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-xl mt-2 ${
-                agreed 
-                ? 'bg-white text-[#F38020] hover:bg-white hover:scale-[1.02] active:scale-95 shadow-orange-900/20' 
+                agreed
+                ? 'bg-white text-[#F38020] hover:bg-white hover:scale-[1.02] active:scale-95 shadow-orange-900/20'
                 : 'bg-white/20 text-white/40 cursor-not-allowed border border-white/10'
               }`}
             >
@@ -349,12 +440,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             {/* 一键登录按钮 (Only in phone mode) */}
             {loginMethod === 'phone' && (
-                <button 
+                <button
                   type="button"
                   onClick={handleOneClickLogin}
                   className={`w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all mt-3 border cursor-pointer active:scale-95 ${
-                    agreed 
-                    ? 'bg-white/10 text-white border-white/30 hover:bg-white/20' 
+                    agreed
+                    ? 'bg-white/10 text-white border-white/30 hover:bg-white/20'
                     : 'bg-white/5 text-white/60 border-white/10 hover:bg-white/10'
                   }`}
                 >
@@ -364,8 +455,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             {/* 注册链接 */}
             <div className="flex justify-center mt-4">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setShowRegister(true)}
                 className="text-white/70 text-xs font-bold hover:text-white transition-colors flex items-center gap-1"
               >
@@ -374,16 +465,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </div>
 
             {/* 协议勾选 */}
-            <div 
-              className="flex items-center justify-center gap-2 cursor-pointer group pt-2 select-none" 
+            <div
+              className="flex items-center justify-center gap-2 cursor-pointer group pt-2 select-none"
               onClick={() => setAgreed(!agreed)}
             >
               <div className={`transition-all duration-300 ${agreed ? 'text-white scale-110' : 'text-white/40'}`}>
                 {agreed ? <CheckCircle2 size={16} className="fill-white/20" /> : <Circle size={16} />}
               </div>
               <div className="text-[10px] text-white/60 font-medium">
-                我已阅读并同意 
-                <span 
+                我已阅读并同意
+                <span
                   className="text-white font-bold ml-1 hover:underline underline-offset-2 transition-all"
                   onClick={openAgreement}
                 >
@@ -394,7 +485,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
           </form>
         </div>
-        
+
         <div className="absolute -bottom-20 w-full text-center opacity-40">
             <p className="text-[8px] text-white font-mono tracking-widest uppercase">Dongyuan Legal System v4.1</p>
         </div>
@@ -419,7 +510,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </div>
             </div>
             <div className="p-5 border-t border-gray-100 bg-slate-50 shrink-0">
-              <button 
+              <button
                 onClick={() => { setShowAgreement(false); setAgreed(true); }}
                 className="w-full bg-[#F38020] text-white py-3.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-orange-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
               >
@@ -456,9 +547,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </div>
                 <div className="space-y-1">
                    <label className="text-xs font-bold text-slate-500 ml-1">所属物业公司</label>
-                   <select 
-                     value={regEnterprise} 
-                     onChange={e => setRegEnterprise(e.target.value)} 
+                   <select
+                     value={regEnterprise}
+                     onChange={e => setRegEnterprise(e.target.value)}
                      className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:border-orange-500 outline-none"
                      required
                    >

@@ -1,37 +1,86 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Stethoscope, CheckCircle, XCircle, ChevronRight, AlertCircle, RefreshCw, FileText, ArrowRight, Bot, ExternalLink, Zap, MessageSquare, ShieldAlert, Activity, ArrowLeft } from 'lucide-react';
-import { db } from '../services/dbService';
-import { HealthCheckSection, ViewState } from '../types';
+import { api } from '../services/apiService';
+import { ViewState } from '../types';
 import { sendMessageToAI } from '../services/geminiService';
 
 interface LegalHealthCheckProps {
   setCurrentView?: (view: ViewState) => void;
 }
 
+interface HealthCheckQuestion {
+  id: string;
+  question: string;
+  options?: { text: string; score: number }[];
+}
+
+interface HealthCheckSection {
+  id: string;
+  section_title: string;
+  section_description?: string;
+  category: string;
+  questions: HealthCheckQuestion[];
+  weight: number;
+  sort_order: number;
+}
+
+// 默认提示词模板
+const DEFAULT_PROMPT_TEMPLATE = `你是一位资深物业法律顾问。用户完成了一份法律体检，系统评级为【{{risk_level}}】。
+以下是用户存在的具体风险点：
+{{risk_points}}
+
+请生成一份深度的《企业合规诊断报告》，必须包含：
+1. 【总体风险评级】：明确指出风险等级（高/中/低），并给出简短的专业评语。
+2. 【核心法律风险分析】：针对上述风险点，引用《民法典》、《物业管理条例》或相关司法解释，详细说明可能导致的法律后果。
+3. 【整改行动指南】：给出3-5条具体的、可落地的整改建议。
+4. 【东元工具推荐】：推荐使用"东元法物"系统内的工具（如：欠费催收助手、装修巡查单、紧急SOP）或建议申请专项服务。
+
+要求：语气专业、严肃、切中痛点，字数在500字左右。`;
+
 const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) => {
   const [sections, setSections] = useState<HealthCheckSection[]>([]);
   const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, number>>({}); // Key format: "sectionIdx-qIdx", Value: 0 (Yes/Good) or 1 (No/Risk)
+  const [answers, setAnswers] = useState<Record<string, number>>({});
   const [isCompleted, setIsCompleted] = useState(false);
-  
+  const [loading, setLoading] = useState(true);
+
   // AI Report State
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  
+  const [promptTemplate, setPromptTemplate] = useState<string>(DEFAULT_PROMPT_TEMPLATE);
+
   // Ref for scrolling
   const topRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setSections(db.getHealthCheck());
-    db.logUsage('LEGAL_HEALTH_CHECK', '企业法务体检');
+    const loadHealthCheck = async () => {
+      try {
+        setLoading(true);
+        // 并行加载体检题目和提示词模板
+        const [data, promptData] = await Promise.all([
+          api.getHealthCheck(),
+          api.getHealthCheckPrompt().catch(() => ({ prompt: DEFAULT_PROMPT_TEMPLATE }))
+        ]);
+        setSections(Array.isArray(data) ? data : []);
+        if (promptData?.prompt) {
+          setPromptTemplate(promptData.prompt);
+        }
+      } catch (err) {
+        console.error('加载法务体检数据失败:', err);
+        setSections([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadHealthCheck();
   }, []);
 
   // 核心修复：监听板块索引变化，强制滚动主容器
   useEffect(() => {
       const mainContainer = document.querySelector('main');
       if (mainContainer) {
-          mainContainer.scrollTo({ top: 0, behavior: 'auto' }); // 使用 auto 瞬间回顶，避免 smooth 带来的滚动延迟感
+          mainContainer.scrollTo({ top: 0, behavior: 'auto' });
       } else {
           window.scrollTo(0, 0);
       }
@@ -65,7 +114,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
           sec.questions.forEach((_, qIdx) => {
               if (answers[`${sIdx}-${qIdx}`] === 1) count++;
           });
-          if (count > 0) riskSummary.push({ title: sec.title, count });
+          if (count > 0) riskSummary.push({ title: sec.section_title, count });
       });
       return riskSummary;
   };
@@ -114,7 +163,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
 
   const getResult = () => {
     const score = calculateScore();
-    
+
     if (score >= 13) {
       return {
         level: '高风险',
@@ -124,13 +173,12 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
         borderColor: 'border-red-200',
         bgColor: 'bg-red-50',
         icon: ShieldAlert,
-        // 详细分点说明
         desc: `您的企业合规体系存在重大系统性漏洞，属于极高危状态。具体表现在：
 1. 核心收费权（物业费）缺乏法律闭环，诉讼时效可能已过，资产流失严重。
-2. 用工管理“裸奔”，未签订规范合同或社保不足，面临巨额赔偿风险。
+2. 用工管理"裸奔"，未签订规范合同或社保不足，面临巨额赔偿风险。
 3. 现场安全管理（电梯/消防）存在盲区，一旦发生人身伤亡事故，负责人可能面临刑事责任。`,
-        consequence: '极易引发群体性诉讼、巨额行政罚款甚至停业整顿。企业抗风险能力极弱，处于“一告就输”的被动局面。',
-        strategy: '立即启动“法律休克疗法”。建议聘请专项法律顾问进驻，全面重塑合同、用工及现场安全制度。'
+        consequence: '极易引发群体性诉讼、巨额行政罚款甚至停业整顿。企业抗风险能力极弱，处于"一告就输"的被动局面。',
+        strategy: '立即启动"法律休克疗法"。建议聘请专项法律顾问进驻，全面重塑合同、用工及现场安全制度。'
       };
     } else if (score >= 6) {
       return {
@@ -146,7 +194,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
 2. 装修巡查、公区管理流于形式，缺乏有效的书面留痕。
 3. 面对恶意欠费业主或复杂人身伤害索赔时，举证能力不足。`,
         consequence: '在处理常规纠纷时尚可应对，但胜诉率不稳定。容易因小疏忽导致大赔偿，存在资产缓慢流失的隐患。',
-        strategy: '重点补强“留痕管理”。完善催收文书送达证据链，规范装修巡查记录。建议针对薄弱板块（如劳资或安全）进行单项合规整改。'
+        strategy: '重点补强"留痕管理"。完善催收文书送达证据链，规范装修巡查记录。建议针对薄弱板块（如劳资或安全）进行单项合规整改。'
       };
     } else {
       return {
@@ -179,30 +227,21 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
   const generateAIReport = async () => {
       setIsGenerating(true);
       const resultStats = getResult();
-      
+
       let riskPointsText = "";
       sections.forEach((sec, sIdx) => {
           sec.questions.forEach((q, qIdx) => {
               if (answers[`${sIdx}-${qIdx}`] === 1) {
-                  riskPointsText += `- [${sec.title}] ${q}\n`;
+                  riskPointsText += `- [${sec.section_title}] ${q.question}\n`;
               }
           });
       });
       if (!riskPointsText) riskPointsText = "无明显风险点，合规状况良好。";
 
-      const prompt = `
-      你是一位资深物业法律顾问。用户完成了一份法律体检，系统评级为【${resultStats.level}】。
-      以下是用户存在的具体风险点：
-      ${riskPointsText}
-
-      请生成一份深度的《企业合规诊断报告》，必须包含：
-      1. 【总体风险评级】：明确指出风险等级（高/中/低），并给出简短的专业评语。
-      2. 【核心法律风险分析】：针对上述风险点，引用《民法典》、《物业管理条例》或相关司法解释，详细说明可能导致的法律后果。
-      3. 【整改行动指南】：给出3-5条具体的、可落地的整改建议。
-      4. 【东元工具推荐】：推荐使用“东元法物”系统内的工具（如：欠费催收助手、装修巡查单、紧急SOP）或建议申请专项服务。
-
-      要求：语气专业、严肃、切中痛点，字数在500字左右。
-      `;
+      // 使用模板生成提示词（从 API 获取的模板）
+      const prompt = promptTemplate
+        .replace(/{{risk_level}}/g, resultStats.level)
+        .replace(/{{risk_points}}/g, riskPointsText.trim());
 
       try {
           const res = await sendMessageToAI(prompt, false, true);
@@ -225,10 +264,17 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
       setCurrentView(ViewState.AI_CHAT);
   };
 
-  if (sections.length === 0) return (
+  if (loading) return (
       <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2">
           <Activity className="animate-spin" size={32} />
           <p className="text-xs font-bold">加载体检模块中...</p>
+      </div>
+  );
+
+  if (sections.length === 0) return (
+      <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2 p-6">
+          <Activity size={32} />
+          <p className="text-xs font-bold">暂无体检数据</p>
       </div>
   );
 
@@ -243,7 +289,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
     const result = getResult();
     const score = calculateScore();
     const recommendations = getRecommendations();
-    
+
     return (
       <div ref={topRef} className="p-6 pb-32 bg-slate-50 min-h-full animate-fade-in">
         <div className="flex items-center gap-2 mb-4">
@@ -256,7 +302,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
         <div className="bg-white rounded-[2.5rem] shadow-xl overflow-hidden mb-6">
            <div className={`p-8 text-white ${result.color} relative overflow-hidden`}>
               <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>
-              
+
               <div className="flex justify-between items-start relative z-10">
                  <div>
                     <h2 className="text-2xl font-black mb-1">企业体检报告</h2>
@@ -267,7 +313,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
                     <div className="text-[10px] font-bold uppercase opacity-80">风险指数</div>
                  </div>
               </div>
-              
+
               {/* 风险等级仪表盘 (Risk Meter) */}
               <div className="mt-6 relative z-10">
                   <div className="flex items-center gap-2 mb-2">
@@ -277,7 +323,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
                       </div>
                       <span className="text-sm font-black italic opacity-90">{result.sub}</span>
                   </div>
-                  
+
                   {/* 可视化进度条 */}
                   <div className="w-full bg-black/20 h-1.5 rounded-full mt-4 mb-1 relative flex items-center justify-between px-1">
                        {/* 标记点 */}
@@ -289,10 +335,10 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
                        ))}
                   </div>
               </div>
-              
+
               <Stethoscope className="absolute bottom-[-20px] right-[-20px] opacity-20 rotate-12" size={140} />
            </div>
-           
+
            <div className="p-8 space-y-8">
               {/* 风险详细解读板块 */}
               <div className={`rounded-2xl p-5 border ${result.borderColor} ${result.bgColor}`}>
@@ -336,8 +382,8 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
                           {recommendations.slice(0, 4).map((rec: any, idx) => {
                               const IconComp = getIconComponent(rec.iconName);
                               return (
-                                  <div 
-                                    key={idx} 
+                                  <div
+                                    key={idx}
                                     onClick={() => {
                                         if(rec.type === 'tool' && setCurrentView) setCurrentView(rec.view);
                                         if(rec.type === 'project' && setCurrentView) setCurrentView(ViewState.RIGHTS_CENTER);
@@ -372,9 +418,9 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
                   <h3 className="font-black text-slate-800 text-sm mb-3 flex items-center gap-2">
                       <Bot size={16} className="text-indigo-500" /> AI 深度合规分析
                   </h3>
-                  
+
                   {!aiReport ? (
-                      <button 
+                      <button
                         onClick={generateAIReport}
                         disabled={isGenerating}
                         className="w-full py-4 bg-indigo-50 text-indigo-600 rounded-2xl font-black text-xs flex items-center justify-center gap-2 border border-indigo-100 hover:bg-indigo-100 transition-all"
@@ -389,9 +435,9 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
                                   {aiReport}
                               </div>
                           </div>
-                          
+
                           {/* 咨询 AI 按钮 */}
-                          <button 
+                          <button
                             onClick={handleConsultAI}
                             className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 hover:bg-indigo-700 transition-all active:scale-95"
                           >
@@ -404,7 +450,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
         </div>
 
         <div className="space-y-3 pb-8">
-           <button 
+           <button
              onClick={() => { setIsCompleted(false); setCurrentSectionIdx(0); setAnswers({}); setAiReport(null); }}
              className="w-full bg-white text-slate-500 py-4 rounded-2xl font-black text-sm border border-slate-200 active:scale-95 transition-all flex items-center justify-center gap-2"
            >
@@ -423,7 +469,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
             <div>
                <h2 className="text-xl font-black text-slate-900">企业合规体检</h2>
                <p className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-widest">
-                 板块 {currentSectionIdx + 1} / {sections.length}：{currentSection.title}
+                 板块 {currentSectionIdx + 1} / {sections.length}：{currentSection.section_title}
                </p>
             </div>
             <div className="text-orange-500 font-black italic text-xl">
@@ -444,24 +490,24 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
                return (
                   <div key={idx} className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
                      <p className="text-sm font-bold text-slate-800 leading-relaxed mb-4">
-                        {idx + 1}. {q}
+                        {idx + 1}. {q.question}
                      </p>
                      <div className="flex gap-3">
-                        <button 
+                        <button
                            onClick={() => handleAnswer(idx, 0)}
                            className={`flex-1 py-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all ${
-                              val === 0 
-                                ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' 
+                              val === 0
+                                ? 'bg-green-500 text-white shadow-lg shadow-green-500/30'
                                 : 'bg-white text-slate-400 border border-slate-200 hover:border-green-200'
                            }`}
                         >
                            <CheckCircle size={14} /> 是 / 有
                         </button>
-                        <button 
+                        <button
                            onClick={() => handleAnswer(idx, 1)}
                            className={`flex-1 py-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all ${
-                              val === 1 
-                                ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' 
+                              val === 1
+                                ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
                                 : 'bg-white text-slate-400 border border-slate-200 hover:border-red-200'
                            }`}
                         >
@@ -479,7 +525,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
          <div className="text-center text-[10px] text-slate-400 mb-2 font-bold">
             {isSectionComplete ? '本板块已完成' : `还需回答 ${currentSection.questions.length - answeredCount} 题`}
          </div>
-         <button 
+         <button
             onClick={nextSection}
             disabled={!isSectionComplete}
             className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:bg-slate-300"

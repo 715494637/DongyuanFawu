@@ -1,18 +1,38 @@
 
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, CheckSquare, AlertCircle, HardHat, FileText, ChevronRight } from 'lucide-react';
-import { db } from '../services/dbService';
-import { RiskScenario } from '../types';
+import { cachedApi } from '../services/apiService';
+
+// 风控场景接口（匹配 API 返回格式）
+interface RiskScenario {
+  id: string;
+  title: string;
+  risk_level?: string;
+  content?: string;
+  questions: string[];
+}
 
 const RiskCheck: React.FC = () => {
   const [scenarios, setScenarios] = useState<RiskScenario[]>([]);
   const [activeScenario, setActiveScenario] = useState<RiskScenario | null>(null);
   const [answers, setAnswers] = useState<Record<number, boolean>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setScenarios(db.getCheckScenarios());
-    db.logUsage('RISK_CHECK', '合规风控自查');
+    const fetchRisks = async () => {
+      try {
+        // 使用带缓存的 API
+        const data = await cachedApi.getRisks();
+        setScenarios(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('获取风控场景失败:', err);
+        setScenarios([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRisks();
   }, []);
 
   const handleStart = (s: RiskScenario) => {

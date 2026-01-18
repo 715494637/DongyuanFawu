@@ -1,8 +1,9 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Edit2, Check, X, LogOut, ShieldCheck, User as UserIcon, Crown } from 'lucide-react';
 import { User, UserRole } from '../types';
-import { db } from '../services/dbService';
+import { api, cachedApi } from '../services/apiService';
+import { CACHE_KEYS, useCache } from '../services/DataCacheContext';
 
 interface ProfileProps {
   user: User;
@@ -14,26 +15,76 @@ const Profile: React.FC<ProfileProps> = ({ user, setUser, onLogout }) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(user.username);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cache = useCache();
 
-  const handleUpdateName = () => {
+  // 同步 tempName 与 user.username
+  useEffect(() => {
+    setTempName(user.username);
+  }, [user.username]);
+
+  const getToken = () => localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+
+  const handleUpdateName = async () => {
     if (!tempName.trim()) return;
-    const updated = db.updateUser(user.id, { username: tempName });
-    if (updated) {
-      setUser(updated);
+    try {
+      const token = getToken();
+      await api.updateUser(user.id, { username: tempName }, token);
+
+      const updatedUser = { ...user, username: tempName };
+      setUser(updatedUser);
       setIsEditingName(false);
+
+      // 同步更新缓存
+      cache.setCache(CACHE_KEYS.USER_INFO, {
+        ...updatedUser,
+        phone_number: user.phoneNumber,
+        role: user.role,
+        enterprise_name: user.enterpriseName,
+        is_certified: user.isCertified,
+        approval_status: user.approvalStatus,
+        quota: user.quota,
+        selected_projects: user.selectedProjects
+      });
+
+      // 通知其他组件用户已更新
+      window.dispatchEvent(new CustomEvent('user-updated'));
+    } catch (err) {
+      console.error('更新用户名失败:', err);
+      alert('更新失败: ' + (err as any).message);
     }
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const base64 = event.target?.result as string;
-      const updated = db.updateUser(user.id, { avatarUrl: base64 });
-      if (updated) {
-        setUser(updated);
+      try {
+        const token = getToken();
+        await api.updateUser(user.id, { avatar_url: base64 }, token);
+
+        const updatedUser = { ...user, avatarUrl: base64 };
+        setUser(updatedUser);
+
+        // 同步更新缓存
+        cache.setCache(CACHE_KEYS.USER_INFO, {
+          ...updatedUser,
+          phone_number: user.phoneNumber,
+          role: user.role,
+          enterprise_name: user.enterpriseName,
+          is_certified: user.isCertified,
+          approval_status: user.approvalStatus,
+          quota: user.quota,
+          selected_projects: user.selectedProjects
+        });
+
+        // 通知其他组件用户已更新
+        window.dispatchEvent(new CustomEvent('user-updated'));
+      } catch (err) {
+        console.error('更新头像失败:', err);
+        alert('更新失败: ' + (err as any).message);
       }
     };
     reader.readAsDataURL(file);

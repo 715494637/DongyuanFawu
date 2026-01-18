@@ -1,27 +1,27 @@
-
 import React, { useState, useEffect } from 'react';
-import { db } from '../services/dbService';
 
-const SplashScreen: React.FC = () => {
-  const [customImage, setCustomImage] = useState<string | null>(null);
+interface SplashScreenProps {
+  customImage?: string;
+}
+
+const SplashScreen: React.FC<SplashScreenProps> = ({ customImage: propImage }) => {
+  const [localImage, setLocalImage] = useState<string | null>(null);
 
   useEffect(() => {
-    // 检查是否存在管理员上传的自定义开屏图
-    const saved = db.getSplashImage();
-    if (saved) {
-      setCustomImage(saved);
+    // 如果有传入的图片，优先使用
+    if (propImage) {
+      setLocalImage(propImage);
     }
-  }, []);
+  }, [propImage]);
 
-  if (customImage) {
+  if (localImage) {
     return (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black overflow-hidden animate-fade-in">
-        <img 
-          src={customImage} 
-          alt="Splash Screen" 
-          className="w-full h-full object-cover animate-[zoomIn_3s_ease-out_forwards]" 
+        <img
+          src={localImage}
+          alt="Splash Screen"
+          className="w-full h-full object-cover animate-[zoomIn_3s_ease-out_forwards]"
         />
-        {/* 内联动画：Ken Burns 效果微缩放 */}
         <style>{`
           @keyframes zoomIn {
              from { transform: scale(1.05); }
@@ -34,30 +34,30 @@ const SplashScreen: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#F38020] overflow-hidden">
-      
+
       {/* 1. 背景动态光影 */}
       <div className="absolute inset-0 bg-gradient-to-br from-[#FF9800] via-[#F38020] to-[#E65100]"></div>
       <div className="absolute top-[-20%] left-[-20%] w-[80vw] h-[80vw] bg-white opacity-10 rounded-full blur-[100px] animate-pulse"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-black opacity-5 rounded-full blur-[120px]"></div>
-      
+
       {/* 2. Logo 核心区域 - 复刻 eastcapital 东元法物 */}
       <div className="relative mb-8 animate-fade-in-up flex flex-col items-center justify-center transform scale-125">
-        
+
         {/* CSS 构造的 Logo */}
         <div className="relative">
           {/* Logo 英文部分 */}
           <h1 className="text-6xl font-sans font-bold text-white tracking-tighter relative z-10" style={{ fontFamily: '"Helvetica Neue", Arial, sans-serif' }}>
             eastcapital
           </h1>
-          
+
           {/* 弧形装饰 (Swoosh) */}
           <div className="absolute top-[-20%] left-[30%] w-[80%] h-[120%] z-0 pointer-events-none opacity-90">
              <svg viewBox="0 0 100 100" className="w-full h-full">
-               <path 
-                 d="M10,80 Q40,-20 90,20" 
-                 fill="none" 
-                 stroke="white" 
-                 strokeWidth="2.5" 
+               <path
+                 d="M10,80 Q40,-20 90,20"
+                 fill="none"
+                 stroke="white"
+                 strokeWidth="2.5"
                  strokeLinecap="round"
                  className="drop-shadow-sm"
                />
@@ -80,7 +80,7 @@ const SplashScreen: React.FC = () => {
         <div className="w-32 h-1 bg-black/10 rounded-full overflow-hidden">
           <div className="h-full bg-white w-full origin-left animate-[progress_2.5s_ease-in-out_forwards]"></div>
         </div>
-        
+
         {/* 版权信息 */}
         <p className="text-[9px] text-white/40 font-mono tracking-widest uppercase">
           Powered by East Capital Legal OS

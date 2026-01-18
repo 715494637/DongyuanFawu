@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, Book, FileCheck, ChevronRight, Image as ImageIcon, Sparkles, PenTool, HardHat, MessageSquare, AlertTriangle, ShieldCheck, Activity, Lock } from 'lucide-react';
 import { ViewState, UserRole } from '../types';
-import { db } from '../services/dbService';
+import { cachedApi } from '../services/apiService';
+import { useCache, CACHE_KEYS } from '../services/DataCacheContext';
 
 interface ToolboxProps {
   setCurrentView: (view: ViewState) => void;
@@ -23,14 +24,44 @@ const TOOLS = [
 
 const Toolbox: React.FC<ToolboxProps> = ({ setCurrentView }) => {
   const [role, setRole] = useState<UserRole>(UserRole.USER);
+  const cache = useCache();
 
   useEffect(() => {
-      const userId = db.getSession();
-      if(userId) {
-          const u = db.getUserById(userId);
-          if(u) setRole(u.role);
+    // 首先尝试从缓存获取用户角色
+    const cachedUser = cache.getCache<any>(CACHE_KEYS.USER_INFO);
+    if (cachedUser?.role) {
+      setRole(cachedUser.role as UserRole);
+    }
+
+    const checkUser = async () => {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (token) {
+        try {
+          // 使用带缓存的 API
+          const userData = await cachedApi.getCurrentUser(token);
+          setRole(userData.role as UserRole);
+        } catch (err) {
+          console.error('获取用户角色失败:', err);
+        }
       }
-  }, []);
+    };
+
+    checkUser();
+
+    // 监听用户更新事件，其他页面更新用户信息时同步
+    const handleUserUpdate = () => {
+      const updatedUser = cache.getCache<any>(CACHE_KEYS.USER_INFO);
+      if (updatedUser?.role) {
+        setRole(updatedUser.role as UserRole);
+      } else {
+        // 缓存没有，尝试重新获取
+        checkUser();
+      }
+    };
+
+    window.addEventListener('user-updated', handleUserUpdate);
+    return () => window.removeEventListener('user-updated', handleUserUpdate);
+  }, [cache]);
 
   const handleToolClick = (tool: any) => {
       if (tool.restricted) {

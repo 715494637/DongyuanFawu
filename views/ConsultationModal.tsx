@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react';
-import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 import { ContactQRCode } from '../types';
 
 interface ConsultationModalProps {
@@ -14,13 +14,21 @@ const ConsultationModal: React.FC<ConsultationModalProps> = ({ isOpen, onClose }
 
   useEffect(() => {
     if (isOpen) {
-      const qrs = db.getContactQRCodes();
-      if (qrs.length > 0) {
-        const randomIndex = Math.floor(Math.random() * qrs.length);
-        setActiveQR(qrs[randomIndex]);
-      } else {
-        setActiveQR(null);
-      }
+      const loadQRCode = async () => {
+        try {
+          const qrs = await api.getContactQR();
+          if (qrs.length > 0) {
+            const randomIndex = Math.floor(Math.random() * qrs.length);
+            setActiveQR(qrs[randomIndex]);
+          } else {
+            setActiveQR(null);
+          }
+        } catch (error) {
+          console.error('Failed to load contact QR codes:', error);
+          setActiveQR(null);
+        }
+      };
+      loadQRCode();
     }
   }, [isOpen]);
 

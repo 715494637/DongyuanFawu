@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Palette, Download, Share2, Check, AlertTriangle, FileText, ImageIcon, ShieldAlert, Zap, Heart, Star } from 'lucide-react';
-import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 import { CustomPosterTemplate } from '../types';
 
 interface PosterTemplate {
@@ -115,32 +115,44 @@ const PosterGenerator: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const posterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // 1. Load Logo
-    const savedLogo = db.getEnterpriseLogo();
-    if (savedLogo) setLogoUrl(savedLogo);
+    const fetchData = async () => {
+      try {
+        // 1. Load Logo
+        const config = await api.getConfig().catch(() => ({}));
+        if (config.enterprise_logo) {
+          setLogoUrl(config.enterprise_logo);
+        }
 
-    // 2. Load Custom Templates from DB
-    const custom = db.getCustomPosters();
-    if (custom && custom.length > 0) {
-      const customTpls: PosterTemplate[] = custom.map(c => ({
-        id: c.id,
-        name: c.name,
-        // 自定义模板使用图片作为背景
-        renderBg: () => (
-          <>
-            <img src={c.imageBase64} className="absolute inset-0 w-full h-full object-cover" alt="bg" />
-            <div className="absolute inset-0 bg-black/20"></div> {/* 增加遮罩确保文字可读 */}
-          </>
-        ),
-        icon: Star, // 自定义模板默认星标图标
-        defaultTitle: '物业通知',
-        themeColor: 'border-purple-500 bg-purple-50 text-purple-600',
-        textColorClass: 'text-white', // 默认白色文字
-        accentColorClass: 'bg-white/20 backdrop-blur-md', // 透明磨砂强调色
-        isCustom: true
-      }));
-      setAllTemplates([...customTpls, ...PRESET_TEMPLATES]);
-    }
+        // 2. Load Custom Templates from API
+        const posters = await api.getPosters().catch(() => []);
+        if (posters && posters.length > 0) {
+          const customTpls: PosterTemplate[] = posters.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            // 自定义模板使用图片作为背景
+            renderBg: () => (
+              <>
+                <img src={c.image_url || c.imageBase64} className="absolute inset-0 w-full h-full object-cover" alt="bg" />
+                <div className="absolute inset-0 bg-black/20"></div>
+              </>
+            ),
+            icon: Star,
+            defaultTitle: '物业通知',
+            themeColor: 'border-purple-500 bg-purple-50 text-purple-600',
+            textColorClass: 'text-white',
+            accentColorClass: 'bg-white/20 backdrop-blur-md',
+            isCustom: true
+          }));
+          setAllTemplates([...customTpls, ...PRESET_TEMPLATES]);
+        } else {
+          setAllTemplates([...PRESET_TEMPLATES]);
+        }
+      } catch (err) {
+        console.error('加载海报数据失败:', err);
+        setAllTemplates([...PRESET_TEMPLATES]);
+      }
+    };
+    fetchData();
   }, []);
 
   const handleTplSelect = (tpl: PosterTemplate) => {
@@ -148,14 +160,19 @@ const PosterGenerator: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     setTitle(tpl.defaultTitle);
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (ev) => {
+      reader.onload = async (ev) => {
         const base64 = ev.target?.result as string;
         setLogoUrl(base64);
-        db.saveEnterpriseLogo(base64);
+        try {
+          const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+          await api.updateConfig({ enterprise_logo: base64 }, token);
+        } catch (err) {
+          console.error('保存Logo失败:', err);
+        }
       };
       reader.readAsDataURL(file);
     }

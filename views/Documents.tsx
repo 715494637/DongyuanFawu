@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, Sparkles, ChevronRight, Copy, Check, Send, Bot, X } from 'lucide-react';
-import { db } from '../services/dbService';
+import { cachedApi } from '../services/apiService';
 import { DocumentItem } from '../types';
 import { sendMessageToAI } from '../services/geminiService';
 
@@ -11,16 +11,32 @@ const Documents: React.FC = () => {
   const [docs, setDocs] = useState<DocumentItem[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<DocumentItem | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  
+
   const [showAIGen, setShowAIGen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiResult, setAiResult] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setDocs(db.getDocs());
-    setCategories(db.getCategories());
-    db.logUsage('DOCUMENTS', '文档模版中心');
+    const fetchDocs = async () => {
+      try {
+        // 使用带缓存的 API 并行请求
+        const [docsData, catsData] = await Promise.all([
+          cachedApi.getDocuments(),
+          cachedApi.getDocCategories().catch(() => ["全部", "前介承接", "业户服务", "外包管理", "纠纷告知"])
+        ]);
+        setDocs(Array.isArray(docsData) ? docsData : []);
+        setCategories(Array.isArray(catsData) ? catsData : []);
+      } catch (err) {
+        console.error('获取文档失败:', err);
+        setDocs([]);
+        setCategories([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDocs();
   }, []);
 
   const filteredDocs = activeCat === "全部" 

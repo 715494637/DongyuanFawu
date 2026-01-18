@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, User, Lock } from 'lucide-react';
-import { db } from '../services/dbService';
 import { UserRole } from '../types';
 
 const LawyerVideo: React.FC = () => {

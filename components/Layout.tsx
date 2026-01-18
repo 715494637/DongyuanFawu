@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Home, Briefcase, User as UserIcon, Bot, ArrowLeft, Bell, Search, X, Clock, AlertCircle, FileText, CheckCircle2, ChevronRight, Zap, BookOpen } from 'lucide-react';
 import { ViewState } from '../types';
-import { db } from '../services/dbService';
+import { usePreload } from '../views/PreloadContext';
 
 interface LayoutProps {
   currentView: ViewState;
@@ -16,9 +16,12 @@ const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, 
   const [showSearch, setShowSearch] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [searchText, setSearchText] = useState('');
-  
+
   // Search Results
   const [searchResults, setSearchResults] = useState<any[]>([]);
+
+  // 从 Context 获取缓存的搜索数据
+  const { data: preloadData } = usePreload();
 
   // 定义一级页面（显示导航栏）
   const mainTabs = [ViewState.HOME, ViewState.TOOLBOX, ViewState.MY_ENTERPRISE];
@@ -56,21 +59,21 @@ const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, 
           if (t.title.toLowerCase().includes(term)) results.push(t);
       });
 
-      // 2. Search Docs
-      const docs = db.getDocs();
-      docs.forEach(d => {
-          if (d.title.toLowerCase().includes(term) || d.category.includes(term)) {
-              results.push({ title: d.title, view: ViewState.DOCUMENTS, type: '文书', sub: d.category });
-          }
-      });
+      // 2. Search Docs (from Context cache)
+      if (preloadData.loaded && preloadData.docs.length > 0) {
+        preloadData.docs.forEach(d => {
+            if (d.title.toLowerCase().includes(term) || (d.category && d.category.includes(term))) {
+                results.push({ title: d.title, view: ViewState.DOCUMENTS, type: '文书', sub: d.category });
+            }
+        });
 
-      // 3. Search Laws
-      const laws = db.getCivilCode();
-      laws.forEach(l => {
-          if (l.title.toLowerCase().includes(term) || l.content.includes(term)) {
-              results.push({ title: l.title, view: ViewState.CIVIL_CODE, type: '法规', sub: l.content.slice(0, 20) + '...' });
-          }
-      });
+        // 3. Search Laws (from Context cache)
+        preloadData.laws.forEach(l => {
+            if (l.title.toLowerCase().includes(term) || (l.content && l.content.includes(term))) {
+                results.push({ title: l.title, view: ViewState.CIVIL_CODE, type: '法规', sub: l.content ? l.content.slice(0, 20) + '...' : '' });
+            }
+        });
+      }
 
       setSearchResults(results);
   };

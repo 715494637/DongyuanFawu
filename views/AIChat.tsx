@@ -4,29 +4,43 @@ import { Send, Bot, User, Volume2, Globe, Sparkles, Headphones } from 'lucide-re
 import { ChatMessage } from '../types';
 import { sendMessageToAI, textToSpeech, decodeAudioData } from '../services/geminiService';
 import ConsultationModal from '../components/ConsultationModal';
-import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 
 const AIChat: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const config = db.getSystemConfig();
-    const welcomeText = config.welcomeMessage || '您好！我是东元物业法务助手。我可以为您提供《民法典》咨询、文书草拟及风险建议。（回答仅供参考）';
-    return [{ id: '0', role: 'model', text: welcomeText, timestamp: Date.now() }];
-  });
-  
+  const [messages, setMessages] = useState<ChatMessage[]>([{ id: '0', role: 'model', text: '您好！我是东元物业法务助手。我可以为您提供《民法典》咨询、文书草拟及风险建议。（回答仅供参考）', timestamp: Date.now() }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [useSearch, setUseSearch] = useState(true);
   const [showConsult, setShowConsult] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Initialize messages with config from API
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const initChat = async () => {
+      try {
+        const config = await api.getConfig().catch(() => ({}));
+        const welcomeText = config.welcome_message || '您好！我是东元物业法务助手。我可以为您提供《民法典》咨询、文书草拟及风险建议。（回答仅供参考）';
+        setMessages([{ id: '0', role: 'model', text: welcomeText, timestamp: Date.now() }]);
+      } catch (err) {
+        console.error('获取欢迎消息失败:', err);
+      } finally {
+        setInitialized(true);
+      }
+    };
+    initChat();
+  }, []);
+
+  useEffect(() => {
+    if (initialized) {
+      scrollToBottom();
+    }
+  }, [messages, initialized]);
 
   useEffect(() => {
     // 1. Check for Pending Search (from RightsCenter etc.)

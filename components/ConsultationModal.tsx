@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react';
-import { db } from '../services/dbService';
+import { api } from '../services/apiService';
 import { ContactQRCode } from '../types';
 
 interface ConsultationModalProps {
@@ -11,16 +11,33 @@ interface ConsultationModalProps {
 
 const ConsultationModal: React.FC<ConsultationModalProps> = ({ isOpen, onClose }) => {
   const [activeQR, setActiveQR] = useState<ContactQRCode | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      const qrs = db.getContactQRCodes();
-      if (qrs.length > 0) {
-        const randomIndex = Math.floor(Math.random() * qrs.length);
-        setActiveQR(qrs[randomIndex]);
-      } else {
-        setActiveQR(null);
-      }
+      const fetchQR = async () => {
+        setLoading(true);
+        try {
+          const qrs = await api.getContactQR().catch(() => []);
+          if (Array.isArray(qrs) && qrs.length > 0) {
+            const randomIndex = Math.floor(Math.random() * qrs.length);
+            setActiveQR({
+              id: qrs[randomIndex].id,
+              name: qrs[randomIndex].name,
+              imageBase64: qrs[randomIndex].image_url || qrs[randomIndex].imageBase64,
+              createdAt: qrs[randomIndex].created_at
+            });
+          } else {
+            setActiveQR(null);
+          }
+        } catch (err) {
+          console.error('获取联系二维码失败:', err);
+          setActiveQR(null);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchQR();
     }
   }, [isOpen]);
 

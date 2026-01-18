@@ -1,35 +1,60 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { ClipboardList, CheckSquare, Square, PenTool, Share2, X, Eraser, Check, FileText, Download, Printer, History, Clock, ArrowLeft } from 'lucide-react';
-import { db } from '../services/dbService';
-import { RenovationRecord } from '../types';
+import { api } from '../services/apiService';
 
 const RenovationCheck: React.FC = () => {
   const [viewMode, setViewMode] = useState<'form' | 'history'>('form');
-  const [historyList, setHistoryList] = useState<RenovationRecord[]>([]);
+  const [historyList, setHistoryList] = useState<any[]>([]);
   const [checklistItems, setChecklistItems] = useState<string[]>([]);
 
   const [checks, setChecks] = useState<Record<number, boolean>>({});
   const [signature, setSignature] = useState<string | null>(null);
   const [showSignPad, setShowSignPad] = useState(false);
   const [showReport, setShowReport] = useState(false);
-  
+  const [loading, setLoading] = useState(true);
+
   // Form State
   const [roomNo, setRoomNo] = useState('');
   const [manager, setManager] = useState('');
-  
+
   // Canvas Refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
   const lastPos = useRef<{x: number, y: number}>({ x: 0, y: 0 });
 
+  const getToken = () => {
+    return sessionStorage.getItem('token') || localStorage.getItem('token') || '';
+  };
+
   useEffect(() => {
     refreshHistory();
-    setChecklistItems(db.getRenovationChecklist());
+    loadRenovationItems();
   }, []);
 
-  const refreshHistory = () => {
-    setHistoryList(db.getRenovationRecords());
+  const loadRenovationItems = async () => {
+    try {
+      const items = await api.getRenovationItems();
+      setChecklistItems(Array.isArray(items) ? items : []);
+    } catch (err) {
+      console.error('加载装修巡查项配置失败:', err);
+      // 使用默认配置作为后备
+      setChecklistItems(['检查承重墙', '检查水电线路', '检查防水层', '检查消防通道', '检查噪音施工时间']);
+    }
+  };
+
+  const refreshHistory = async () => {
+    try {
+      setLoading(true);
+      const token = getToken();
+      const data = await api.getRenovationRecords(token);
+      setHistoryList(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('加载装修巡查记录失败:', err);
+      setHistoryList([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleCheck = (idx: number) => {
@@ -45,11 +70,10 @@ const RenovationCheck: React.FC = () => {
 
   const draw = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing.current || !canvasRef.current) return;
-    // WeChat Fix: Prevent scrolling when drawing
     if (e.type === 'touchmove') {
-       e.preventDefault(); 
+       e.preventDefault();
     }
-    
+
     const ctx = canvasRef.current.getContext('2d');
     const pos = getPos(e);
     if (ctx) {
@@ -108,40 +132,44 @@ const RenovationCheck: React.FC = () => {
     setShowReport(true);
   };
 
-  const handleConfirmArchive = () => {
-      const newRecord: RenovationRecord = {
-          id: Date.now().toString(),
-          roomNo,
-          manager,
-          checks,
-          signature: signature || '',
-          date: Date.now()
+  const handleConfirmArchive = async () => {
+      const recordData = {
+          property_unit: roomNo,
+          check_date: new Date().toISOString().split('T')[0],
+          inspector: manager,
+          images: [],
+          check_result: Object.values(checks).some(v => !v) ? 'abnormal' : 'normal',
+          violations: Object.values(checks).some(v => !v) ? checklistItems.filter((_, i) => !checks[i]).join(',') : null,
+          notes: ''
       };
-      
-      db.addRenovationRecord(newRecord);
-      alert("✅ 单据已归档成功！\n您可以在“巡查记录”中查看历史单据。");
-      
-      refreshHistory();
+
+      try {
+          const token = getToken();
+          await api.createRenovationRecord(recordData, token);
+          alert("单据已归档成功！您可以在巡查记录中查看历史单据。");
+          refreshHistory();
+      } catch (err) {
+          alert("归档失败: " + (err as any).message);
+          return;
+      }
+
       setShowReport(false);
-      
-      // Reset Form
       setRoomNo('');
       setManager('');
       setChecks({});
       setSignature(null);
   };
 
-  const loadRecord = (rec: RenovationRecord) => {
-      setRoomNo(rec.roomNo);
-      setManager(rec.manager);
-      setChecks(rec.checks);
-      setSignature(rec.signature);
-      setShowReport(true); // Open directly in preview mode
+  const loadRecord = (rec: any) => {
+      setRoomNo(rec.property_unit || '');
+      setManager(rec.inspector || '');
+      setSignature(rec.signature || rec.images?.[0] || null);
+      setShowReport(true);
   };
 
   return (
     <div className="p-6 pb-24 space-y-6 animate-fade-in bg-slate-50 min-h-full">
-      
+
       {/* Header */}
       <div className="bg-orange-600 rounded-3xl p-6 text-white shadow-xl flex justify-between items-start">
         <div>
@@ -150,7 +178,7 @@ const RenovationCheck: React.FC = () => {
             </h2>
             <p className="text-[10px] text-orange-100 opacity-80 uppercase tracking-widest">规范施工管理 · 规避连带责任</p>
         </div>
-        <button 
+        <button
             onClick={() => setViewMode(viewMode === 'form' ? 'history' : 'form')}
             className="flex flex-col items-center gap-1 opacity-90 hover:opacity-100 transition-opacity"
         >
@@ -165,10 +193,12 @@ const RenovationCheck: React.FC = () => {
           <div className="space-y-4 animate-fade-in">
               <div className="flex items-center gap-2 mb-2">
                  <button onClick={() => setViewMode('form')} className="text-slate-400"><ArrowLeft size={16}/></button>
-                 <h3 className="font-bold text-slate-700">历史归档记录 ({historyList.length})</h3>
+                 <h3 className="font-bold text-slate-700">历史归档记录 ({loading ? '...' : historyList.length})</h3>
               </div>
-              
-              {historyList.length === 0 ? (
+
+              {loading ? (
+                  <div className="text-center text-slate-400 py-8">加载中...</div>
+              ) : historyList.length === 0 ? (
                   <div className="py-20 text-center text-slate-400">
                       <History size={48} className="mx-auto mb-4 opacity-20"/>
                       <p className="text-xs">暂无历史归档记录</p>
@@ -178,11 +208,11 @@ const RenovationCheck: React.FC = () => {
                       <div key={rec.id} onClick={() => loadRecord(rec)} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex justify-between items-center active:scale-[0.98] transition-all">
                           <div>
                               <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-black text-slate-800">{rec.roomNo}</span>
-                                  <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{rec.manager}</span>
+                                  <span className="font-black text-slate-800">{rec.property_unit}</span>
+                                  <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{rec.inspector}</span>
                               </div>
                               <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                                  <Clock size={10}/> {new Date(rec.date).toLocaleString()}
+                                  <Clock size={10}/> {rec.check_date || new Date(rec.created_at).toLocaleDateString()}
                               </div>
                           </div>
                           <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500">
@@ -198,20 +228,20 @@ const RenovationCheck: React.FC = () => {
                 <div className="flex gap-4 mb-6 border-b border-gray-50 pb-4">
                     <div className="flex-1">
                         <label className="text-[10px] text-gray-400 font-bold uppercase">房号</label>
-                        <input 
+                        <input
                         value={roomNo}
                         onChange={(e) => setRoomNo(e.target.value)}
-                        className="w-full bg-slate-50 p-2 rounded-lg text-sm font-bold mt-1 outline-none focus:ring-2 focus:ring-orange-200" 
-                        placeholder="如 3-101" 
+                        className="w-full bg-slate-50 p-2 rounded-lg text-sm font-bold mt-1 outline-none focus:ring-2 focus:ring-orange-200"
+                        placeholder="如 3-101"
                         />
                     </div>
                     <div className="flex-1">
                         <label className="text-[10px] text-gray-400 font-bold uppercase">施工方负责人</label>
-                        <input 
+                        <input
                         value={manager}
                         onChange={(e) => setManager(e.target.value)}
-                        className="w-full bg-slate-50 p-2 rounded-lg text-sm font-bold mt-1 outline-none focus:ring-2 focus:ring-orange-200" 
-                        placeholder="姓名" 
+                        className="w-full bg-slate-50 p-2 rounded-lg text-sm font-bold mt-1 outline-none focus:ring-2 focus:ring-orange-200"
+                        placeholder="姓名"
                         />
                     </div>
                 </div>
@@ -225,11 +255,6 @@ const RenovationCheck: React.FC = () => {
                             <span className={`text-sm font-medium ${checks[i] ? 'text-gray-800' : 'text-gray-500'}`}>{item}</span>
                         </div>
                     ))}
-                    {checklistItems.length === 0 && (
-                        <div className="text-center text-xs text-slate-400 py-4">
-                            暂无检查项，请联系管理员在后台配置。
-                        </div>
-                    )}
                 </div>
             </div>
 
@@ -247,8 +272,8 @@ const RenovationCheck: React.FC = () => {
                         <div className="text-xs text-red-500 mt-1">需装修负责人现场签字</div>
                     )}
                 </div>
-                <button 
-                    onClick={() => setShowSignPad(true)} 
+                <button
+                    onClick={() => setShowSignPad(true)}
                     className={`p-3 rounded-xl transition-all active:scale-95 ${signature ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600 animate-pulse'}`}
                 >
                     <PenTool size={20}/>
@@ -269,13 +294,12 @@ const RenovationCheck: React.FC = () => {
                     <h3 className="font-black text-lg text-slate-800">请在此处签名</h3>
                     <button onClick={() => setShowSignPad(false)} className="p-2 bg-slate-100 rounded-full text-slate-500"><X size={20}/></button>
                 </div>
-                
+
                 <div className="relative w-full h-64 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl overflow-hidden touch-none">
                     <canvas
                         ref={canvasRef}
-                        width={600} 
+                        width={600}
                         height={400}
-                        // WeChat Optimization: touchAction none prevents page scrolling
                         style={{ touchAction: 'none' }}
                         className="w-full h-full cursor-crosshair"
                         onMouseDown={startDrawing}
@@ -317,7 +341,6 @@ const RenovationCheck: React.FC = () => {
                  {/* Paper Content */}
                  <div className="flex-1 overflow-y-auto p-6 bg-slate-200">
                      <div className="bg-white p-8 shadow-sm min-h-[500px] relative text-slate-800 flex flex-col">
-                         {/* Watermark */}
                          <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none rotate-[-15deg]">
                              <span className="text-6xl font-black uppercase">East Capital Legal</span>
                          </div>
@@ -354,7 +377,7 @@ const RenovationCheck: React.FC = () => {
                                          <tr key={i} className="border-b border-slate-100">
                                              <td className="py-2 pr-2 text-slate-600">{i + 1}. {item}</td>
                                              <td className="py-2 w-12 text-center font-bold">
-                                                 {checks[i] ? <span className="text-red-500">异常</span> : <span className="text-green-500">合格</span>}
+                                                 {checks[i] ? <span className="text-green-500">合格</span> : <span className="text-red-500">异常</span>}
                                              </td>
                                          </tr>
                                      ))}
@@ -370,12 +393,11 @@ const RenovationCheck: React.FC = () => {
                                  </div>
                              </div>
                          </div>
-                         
-                         {/* Disclaimer Footer - UPDATED STRICT */}
+
                          <div className="mt-auto pt-4 border-t border-dashed border-slate-300">
                             <p className="text-[9px] text-slate-400 leading-relaxed text-justify">
                                 <span className="text-slate-600 font-bold">法律效力免责声明：</span>
-                                本单据仅作为物业服务中心开展日常装修管理的<span className="font-bold text-slate-700">“内部巡查记录”</span>，旨在督促相关方进行违规整改，<span className="font-bold text-slate-700">不具备行政执法效力，亦不直接作为司法认定的法律证据</span>。如需进行司法鉴定、行政处罚或诉讼，应以政府行政主管部门（如住建局、城管执法局）出具的正式法律文书或具备资质的第三方鉴定机构出具的报告为准。
+                                本单据仅作为物业服务中心开展日常装修管理的<span className="font-bold text-slate-700">"内部巡查记录"</span>，旨在督促相关方进行违规整改，<span className="font-bold text-slate-700">不具备行政执法效力，亦不直接作为司法认定的法律证据</span>。如需进行司法鉴定、行政处罚或诉讼，应以政府行政主管部门（如住建局、城管执法局）出具的正式法律文书或具备资质的第三方鉴定机构出具的报告为准。
                             </p>
                          </div>
                      </div>

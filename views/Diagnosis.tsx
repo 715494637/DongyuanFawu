@@ -1,10 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ChevronRight, FileText, Sparkles, ArrowLeft, Shield, AlertTriangle, HeadphonesIcon, Camera, MessageSquare, Copy } from 'lucide-react';
 import { sendMessageToAI } from '../services/geminiService';
 import ConsultationModal from '../components/ConsultationModal';
 import { ViewState } from '../types';
-import { db } from '../services/dbService';
 
 interface DiagnosisProps {
   setCurrentView?: (view: ViewState) => void;
@@ -101,10 +100,6 @@ const Diagnosis: React.FC<DiagnosisProps> = ({ setCurrentView }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [showConsult, setShowConsult] = useState(false);
-
-  useEffect(() => {
-      db.logUsage('DIAGNOSIS', '纠纷快诊');
-  }, []);
 
   const handleAIDiagnosis = async () => {
     if (!userInput.trim()) return;

@@ -1,15 +1,28 @@
 
 import React, { useState, useEffect } from 'react';
 import { CheckCircle2, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react';
-import { db } from '../services/dbService';
+import { cachedApi } from '../services/apiService';
 import { EvidenceGroup } from '../types';
 
 const EvidenceList: React.FC = () => {
   const [openIdx, setOpenIdx] = useState<number | null>(0);
   const [evidenceData, setEvidenceData] = useState<EvidenceGroup[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setEvidenceData(db.getEvidenceList());
+    const fetchEvidence = async () => {
+      try {
+        // 使用带缓存的 API
+        const data = await cachedApi.getEvidence();
+        setEvidenceData(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('获取证据清单失败:', err);
+        setEvidenceData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEvidence();
   }, []);
 
   return (
