@@ -236,17 +236,7 @@ const Home: React.FC<HomeProps> = ({ setCurrentView }) => {
 
   const downloadTemplate = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // Mock download
-    const headers = "房号,业主姓名,欠费金额,欠费开始时间,欠费结束时间,联系电话\n";
-    const example = "1-101,张三,5000,2023-01-01,2023-12-31,13800000000\n";
-    const blob = new Blob([`\ufeff${headers}${example}`], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "东元物业欠费委托模板.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    window.open('https://www.kdocs.cn/l/crHK1dJSNw2a', '_blank');
   };
 
   // 权益进度计算

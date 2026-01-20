@@ -5,12 +5,12 @@ import { api } from "./apiService";
 const getSystemInstruction = async () => {
   const kb = await api.getAIKB();
   return `
-你现在是“东元物业法务助手”（智能辅助工具，非人类律师）。
+你现在是"东元物业法务助手"（智能辅助工具，非人类律师）。
 身份定位：你是一个辅助物业经理进行法律决策的智能助手。
 核心原则：
 1. 你的回答仅供参考，不构成正式法律意见。
 2. 回复必须遵循《中华人民共和国民法典》及相关物业法规。
-3. 遇到复杂、高风险（如涉及人身伤害、重大金额赔偿、刑事责任）的问题，必须在回复末尾明确提示：“该情况风险较高，建议使用‘一键咨询’功能获取东元律师团队的人工服务。”
+3. 遇到复杂、高风险（如涉及人身伤害、重大金额赔偿、刑事责任）的问题，必须在回复末尾明确提示："该情况风险较高，建议使用'一键咨询'功能获取东元律师团队的人工服务。"
 
 管理员设定的业务规则：
 "${kb}"
@@ -18,12 +18,17 @@ const getSystemInstruction = async () => {
 回复风格：
 - 结构化、专业但有亲和力。
 - 引用法律条文。
-- 明确区分“通用法规”与“个案建议”。
+- 明确区分"通用法规"与"个案建议"。
 `;
 };
 
 export const sendMessageToAI = async (message: string, useSearch: boolean = false, isComplex: boolean = false): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({
+    apiKey: import.meta.env.VITE_GEMINI_API_KEY || '',
+    httpOptions: {
+      baseUrl: import.meta.env.VITE_GEMINI_BASE_URL || '',
+    },
+  });
   // 复杂诊断使用 Pro 模型，日常对话使用 Flash 模型
   const modelName = isComplex ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
   
@@ -55,7 +60,12 @@ export const sendMessageToAI = async (message: string, useSearch: boolean = fals
 };
 
 export const generateImage = async (prompt: string): Promise<string | null> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({
+    apiKey: import.meta.env.VITE_GEMINI_API_KEY || '',
+    httpOptions: {
+      baseUrl: import.meta.env.VITE_GEMINI_BASE_URL || '',
+    },
+  });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
@@ -77,7 +87,12 @@ export const generateImage = async (prompt: string): Promise<string | null> => {
 };
 
 export const textToSpeech = async (text: string): Promise<Uint8Array | null> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({
+    apiKey: import.meta.env.VITE_GEMINI_API_KEY || '',
+    httpOptions: {
+      baseUrl: import.meta.env.VITE_GEMINI_BASE_URL || '',
+    },
+  });
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",

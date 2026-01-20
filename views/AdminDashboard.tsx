@@ -7,6 +7,7 @@ import {
   FileText, MessageSquare, AlertTriangle, ClipboardList, Star, Activity, Inbox, ArrowRight, PhoneCall, BarChart2, Calendar
 } from 'lucide-react';
 import { api } from '../services/apiService';
+import { imageUploadService } from '../services/imageUploadService';
 import { cache, CACHE_KEYS } from '../services/DataCacheContext';
 import { DocumentItem, RiskScenario, User, UserRole, EvidenceGroup, LawArticle, CustomPosterTemplate, ContactQRCode, SystemConfig, RightsConfig, EnterpriseStats, VipLevelConfig, ScriptScenario, EmergencySOP, SpecialProject, ServiceRequest, UsageLog } from '../types';
 
@@ -473,14 +474,12 @@ const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       const reader = new FileReader();
       reader.onload = async (ev) => {
         const base64 = ev.target?.result as string;
-        try {
-          const token = getToken();
-          await api.uploadSplashImage({ splash_image: base64 }, token);
-          setSplashImage(base64);
-          alert('开屏图已更新');
-        } catch (err: any) {
-          alert('上传失败: ' + err.message);
-        }
+        // 上传到 ImageBB 获取 URL
+        const imageUrl = await imageUploadService.uploadImage(base64);
+        const token = getToken();
+        await api.uploadSplashImage({ splash_image: imageUrl }, token);
+        setSplashImage(base64);
+        alert('开屏图已上传到图床');
       };
       reader.readAsDataURL(file);
     }
@@ -626,15 +625,12 @@ const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     if (f) {
       const r = new FileReader();
       r.onload = async (ev) => {
-        try {
-          const base64 = ev.target?.result as string;
-          // 注意：需要先上传图片到服务器获取 URL，这里简化处理
-          const token = getToken();
-          await api.createPoster({ name: '自定义海报', image_url: base64 }, token);
-          await refreshData();
-        } catch (err: any) {
-          alert('上传失败: ' + err.message);
-        }
+        const base64 = ev.target?.result as string;
+        // 上传到 ImageBB 获取 URL
+        const imageUrl = await imageUploadService.uploadImage(base64);
+        const token = getToken();
+        await api.createPoster({ name: '自定义海报', image_url: imageUrl }, token);
+        await refreshData();
       };
       r.readAsDataURL(f);
     }
@@ -645,14 +641,12 @@ const AdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     if (f) {
       const r = new FileReader();
       r.onload = async (ev) => {
-        try {
-          const base64 = ev.target?.result as string;
-          const token = getToken();
-          await api.createContactQR({ name: '新顾问', image_url: base64 }, token);
-          await refreshData();
-        } catch (err: any) {
-          alert('上传失败: ' + err.message);
-        }
+        const base64 = ev.target?.result as string;
+        // 上传到 ImageBB 获取 URL
+        const imageUrl = await imageUploadService.uploadImage(base64);
+        const token = getToken();
+        await api.createContactQR({ name: '新顾问', image_url: imageUrl }, token);
+        await refreshData();
       };
       r.readAsDataURL(f);
     }

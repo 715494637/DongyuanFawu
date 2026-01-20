@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Palette, Download, Share2, Check, AlertTriangle, FileText, ImageIcon, ShieldAlert, Zap, Heart, Star } from 'lucide-react';
 import { api } from '../services/apiService';
+import { imageUploadService } from '../services/imageUploadService';
 import { CustomPosterTemplate } from '../types';
 
 interface PosterTemplate {
@@ -167,12 +168,10 @@ const PosterGenerator: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       reader.onload = async (ev) => {
         const base64 = ev.target?.result as string;
         setLogoUrl(base64);
-        try {
-          const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
-          await api.updateConfig({ enterprise_logo: base64 }, token);
-        } catch (err) {
-          console.error('保存Logo失败:', err);
-        }
+        // 上传到 ImageBB 获取 URL
+        const imageUrl = await imageUploadService.uploadImage(base64);
+        const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+        await api.updateConfig({ enterprise_logo: imageUrl }, token);
       };
       reader.readAsDataURL(file);
     }

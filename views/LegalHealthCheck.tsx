@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Stethoscope, CheckCircle, XCircle, ChevronRight, AlertCircle, RefreshCw, FileText, ArrowRight, Bot, ExternalLink, Zap, MessageSquare, ShieldAlert, Activity, ArrowLeft } from 'lucide-react';
-import { api } from '../services/apiService';
 import { ViewState } from '../types';
 import { sendMessageToAI } from '../services/geminiService';
 
@@ -24,6 +23,100 @@ interface HealthCheckSection {
   weight: number;
   sort_order: number;
 }
+
+// 企业合规体检写死数据
+const HEALTH_CHECK_DATA: HealthCheckSection[] = [
+  {
+    id: '1',
+    section_title: '物业费收缴与债权管理',
+    category: '物业费',
+    weight: 1,
+    sort_order: 1,
+    questions: [
+      { id: '1-1', question: '贵司是否保存了所有业主完整的身份信息复印件（身份证/房产证）？' },
+      { id: '1-2', question: '针对欠费业主，是否建立了每6个月至少一次的书面/短信催缴记录，并成功保留了证据？' },
+      { id: '1-3', question: '是否对欠费超过2年的款项进行了专门标注，并采取了中断诉讼时效的法律措施？' },
+      { id: '1-4', question: '物业服务合同中，是否明确约定了逾期缴纳物业费的违约金/滞纳金计算标准？' },
+      { id: '1-5', question: '对于空置房的物业费收取标准，是否取得了当地物价部门或业委会的书面确认文件？' },
+      { id: '1-6', question: '在催收过程中，是否拥有标准的催收话术SOP，以避免因言语不当引发的侵权投诉？' }
+    ]
+  },
+  {
+    id: '2',
+    section_title: '基础合同与印章管理',
+    category: '合同',
+    weight: 1,
+    sort_order: 2,
+    questions: [
+      { id: '2-1', question: '贵司目前使用的《物业服务合同》版本，是否在近两年内经过专业律师根据《民法典》进行过修订？' },
+      { id: '2-2', question: '对外签署的采购、外包等合同，是否每一份都经过了法务或律师的审核？' },
+      { id: '2-3', question: '公司是否建立了严格的合同归档制度，确保合同原件在合同履行完毕后仍能保存3年以上？' },
+      { id: '2-4', question: '用印申请是否实现了线上化留痕，且严禁业务人员携带公章外出而不受监管？' },
+      { id: '2-5', question: '与第三方（如电梯维保、清洁公司）签署的合同中，是否明确转嫁了因其工作失误导致的安全事故责任？' },
+      { id: '2-6', question: '是否拥有防范"表见代理"风险的机制（如离职员工未收回授权委托书或工牌）？' }
+    ]
+  },
+  {
+    id: '3',
+    section_title: '劳资人事合规',
+    category: '用工',
+    weight: 1,
+    sort_order: 3,
+    questions: [
+      { id: '3-1', question: '贵司是否与所有全职员工（包括保洁、保安）在入职30日内签订了书面劳动合同？' },
+      { id: '3-2', question: '对于退休返聘人员（超过法定退休年龄），是否签订了《劳务协议》而非《劳动合同》？' },
+      { id: '3-3', question: '是否为所有符合条件的员工依法缴纳了社会保险？' },
+      { id: '3-4', question: '公司的《员工手册》或规章制度，在发布前是否经过了民主程序（如职工代表大会讨论）并保留了签字证据？' },
+      { id: '3-5', question: '是否建立了完善的加班审批制度，以避免员工离职时索要巨额加班费？' },
+      { id: '3-6', question: '对于辞退违纪员工，是否能够提供充分的、经员工签字确认的违纪证据链？' }
+    ]
+  },
+  {
+    id: '4',
+    section_title: '现场安全与侵权责任',
+    category: '安全',
+    weight: 1,
+    sort_order: 4,
+    questions: [
+      { id: '4-1', question: '小区内是否存在高空抛物监控盲区？如有，是否已张贴足够的警示标语并定期巡查拍照留底？' },
+      { id: '4-2', question: '消防设施是否每月进行检查，并保留了完整的、无涂改的《消防巡查记录表》？' },
+      { id: '4-3', question: '电梯等特种设备是否严格按期年检，并保存了维保单位的每一次维保单据？' },
+      { id: '4-4', question: '贵司是否购买了足额的"物业管理责任险（公众责任险）"，且明确保额覆盖了电梯、高空坠物等高风险场景？' },
+      { id: '4-5', question: '小区内的水系、道路坑洼、施工区域，是否设置了清晰可见的围挡和警示标志？' },
+      { id: '4-6', question: '针对台风、暴雨、火灾等突发事件，是否制定了应急预案并每年至少组织一次演练？' }
+    ]
+  },
+  {
+    id: '5',
+    section_title: '装修与违建管理',
+    category: '装修',
+    weight: 1,
+    sort_order: 5,
+    questions: [
+      { id: '5-1', question: '业主装修前，是否签署了《装修管理服务协议》并缴纳了装修押金？' },
+      { id: '5-2', question: '物业人员在装修巡查中发现违规拆改承重墙等行为时，是否当场下达了《整改通知书》并拍照留证？' },
+      { id: '5-3', question: '对于拒不整改的违规装修，是否已向城管或住建部门书面报告并保留了回执？' },
+      { id: '5-4', question: '装修工人的出入证管理是否严格，是否强制要求购买了意外伤害保险？' },
+      { id: '5-5', question: '是否明确告知业主装修垃圾的堆放地点和清运标准，并留有书面确认？' },
+      { id: '5-6', question: '对于业主在公共区域（楼道、天台）的违章搭建，是否定期进行了清理告知并留痕？' }
+    ]
+  },
+  {
+    id: '6',
+    section_title: '数据合规与业委会关系',
+    category: '数据',
+    weight: 1,
+    sort_order: 6,
+    questions: [
+      { id: '6-1', question: '贵司收集的业主信息（人脸识别、车牌、家庭成员），是否获得了业主的书面授权同意？' },
+      { id: '6-2', question: '是否定期公示了公共收益（电梯广告、停车费）的收支明细，且数据经得起审计？' },
+      { id: '6-3', question: '面对业委会成立或换届，是否拥有合法的介入和沟通机制，而非被动等待？' },
+      { id: '6-4', question: '是否建立了应对媒体曝光或网络负面舆情的危机公关处理机制？' },
+      { id: '6-5', question: '公司的微信公众号、宣传海报使用的图片/字体，是否确认拥有合法版权？' },
+      { id: '6-6', question: '是否建立了廉洁反腐机制，严禁项目经理在采购或外包中收受回扣？' }
+    ]
+  }
+];
 
 // 默认提示词模板
 const DEFAULT_PROMPT_TEMPLATE = `你是一位资深物业法律顾问。用户完成了一份法律体检，系统评级为【{{risk_level}}】。
@@ -54,26 +147,9 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
   const topRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const loadHealthCheck = async () => {
-      try {
-        setLoading(true);
-        // 并行加载体检题目和提示词模板
-        const [data, promptData] = await Promise.all([
-          api.getHealthCheck(),
-          api.getHealthCheckPrompt().catch(() => ({ prompt: DEFAULT_PROMPT_TEMPLATE }))
-        ]);
-        setSections(Array.isArray(data) ? data : []);
-        if (promptData?.prompt) {
-          setPromptTemplate(promptData.prompt);
-        }
-      } catch (err) {
-        console.error('加载法务体检数据失败:', err);
-        setSections([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadHealthCheck();
+    // 直接使用写死的数据，无需加载
+    setSections(HEALTH_CHECK_DATA);
+    setLoading(false);
   }, []);
 
   // 核心修复：监听板块索引变化，强制滚动主容器

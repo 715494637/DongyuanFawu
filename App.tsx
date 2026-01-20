@@ -35,7 +35,7 @@ const App: React.FC = () => {
           const stored = localStorage.getItem('dy_system_config');
           if (stored) {
               const cfg = JSON.parse(stored);
-              return cfg.enableSplashScreen !== false;
+              return cfg.enable_splash_screen !== false;
           }
       } catch(e) {}
       return true;
@@ -139,6 +139,14 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // 根据预加载的配置更新开屏状态
+  useEffect(() => {
+    if (preloadedData?.enableSplashScreen !== undefined) {
+      const shouldShowSplash = preloadedData.enableSplashScreen !== false;
+      setShowSplash(shouldShowSplash);
+    }
+  }, [preloadedData]);
+
   useEffect(() => {
     if (showSplash) {
         const timer = setTimeout(() => {
@@ -161,17 +169,26 @@ const App: React.FC = () => {
       role: (loggedInUser.role as string)?.toUpperCase() as UserRole
     };
     setUser(normalizedUser);
-    // 保存用户到 dbService（用于跨页面共享用户状态）
-    const users = db.getUsers();
-    const existingIndex = users.findIndex(u => u.id === normalizedUser.id);
-    if (existingIndex >= 0) {
-      users[existingIndex] = normalizedUser;
-    } else {
-      users.push(normalizedUser);
+    // 保存用户到 localStorage（用于跨页面共享用户状态）
+    try {
+      const storedUsers = localStorage.getItem('dy_users');
+      const users = storedUsers ? JSON.parse(storedUsers) : [];
+      const existingIndex = users.findIndex((u: User) => u.id === normalizedUser.id);
+      if (existingIndex >= 0) {
+        users[existingIndex] = normalizedUser;
+      } else {
+        users.push(normalizedUser);
+      }
+      localStorage.setItem('dy_users', JSON.stringify(users));
+      // 保存会话 ID
+      if (remember) {
+        localStorage.setItem('dy_session_user', normalizedUser.id);
+      } else {
+        sessionStorage.setItem('dy_session_user', normalizedUser.id);
+      }
+    } catch (e) {
+      console.error('保存用户数据失败:', e);
     }
-    db.saveUsers(users);
-    // 保存会话 ID
-    db.setSession(normalizedUser.id, remember);
     if (normalizedUser.role === UserRole.ADMIN) {
       setCurrentView(ViewState.ADMIN_DASHBOARD);
     } else {
@@ -181,7 +198,8 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     setUser(null);
-    db.clearSession();
+    localStorage.removeItem('dy_session_user');
+    sessionStorage.removeItem('dy_session_user');
     setCurrentView(ViewState.HOME);
   };
 

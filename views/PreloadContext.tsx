@@ -4,6 +4,7 @@ import { api } from '../services/apiService';
 interface PreloadData {
   agreement: string | null;
   enablePhoneLogin: boolean;
+  enableSplashScreen: boolean;
   enterprises: string[];
   splashImage: string | null;
   docs: any[];      // 文档列表
@@ -33,6 +34,7 @@ export const preloadLoginData = async (): Promise<PreloadData> => {
   const result: PreloadData = {
     agreement: null,
     enablePhoneLogin: true,
+    enableSplashScreen: true,
     enterprises: [],
     splashImage: null,
     docs: [],
@@ -61,6 +63,17 @@ export const preloadLoginData = async (): Promise<PreloadData> => {
     // 处理配置
     if (configRes.status === 'fulfilled') {
       result.enablePhoneLogin = configRes.value.enable_phone_login ?? true;
+      result.enableSplashScreen = configRes.value.enable_splash_screen ?? true;
+      // 保存配置到 localStorage，供 App.tsx 初始状态使用
+      try {
+        const savedConfig = localStorage.getItem('dy_system_config');
+        const config = savedConfig ? JSON.parse(savedConfig) : {};
+        config.enable_splash_screen = result.enableSplashScreen;
+        config.enable_phone_login = result.enablePhoneLogin;
+        localStorage.setItem('dy_system_config', JSON.stringify(config));
+      } catch (e) {
+        // ignore
+      }
     }
 
     // 处理企业列表
@@ -107,6 +120,7 @@ export const PreloadProvider: React.FC<PreloadProviderProps> = ({ children, init
   const [data, setData] = useState<PreloadData>(() => ({
     agreement: null,
     enablePhoneLogin: true,
+    enableSplashScreen: true,
     enterprises: [],
     splashImage: null,
     docs: [],
@@ -114,13 +128,27 @@ export const PreloadProvider: React.FC<PreloadProviderProps> = ({ children, init
     loaded: false,
     loading: true,
     error: null,
-    ...initialData
+    ...(initialData || {})
   }));
+
+  // 当 initialData 变化时，更新状态
+  useEffect(() => {
+    if (initialData) {
+      setData(prev => ({ ...prev, ...initialData, loaded: true, loading: false }));
+    }
+  }, [initialData]);
 
   const refresh = async () => {
     const newData = await preloadLoginData();
     setData(newData);
   };
+
+  // 如果没有 initialData，自动触发加载
+  useEffect(() => {
+    if (!initialData && !data.loaded && !data.loading) {
+      refresh();
+    }
+  }, [initialData, data.loaded, data.loading]);
 
   return (
     <PreloadContext.Provider value={{ data, refresh }}>
