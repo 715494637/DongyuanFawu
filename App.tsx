@@ -198,8 +198,19 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     setUser(null);
+    // 清除 token
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
+    // 清除会话用户
     localStorage.removeItem('dy_session_user');
     sessionStorage.removeItem('dy_session_user');
+    // 清除本地缓存数据
+    localStorage.removeItem('dy_cached_user');
+    localStorage.removeItem('dy_cached_stats');
+    localStorage.removeItem('dy_cached_vip_levels');
+    localStorage.removeItem('dy_cache_timestamp');
+    // 清除报告上下文
+    localStorage.removeItem('dy_report_context');
     setCurrentView(ViewState.HOME);
   };
 
