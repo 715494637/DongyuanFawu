@@ -152,14 +152,11 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
     setLoading(false);
   }, []);
 
-  // 核心修复：监听板块索引变化，强制滚动主容器
+  // 核心修复：监听板块索引变化，强制滚动到顶部
   useEffect(() => {
-      const mainContainer = document.querySelector('main');
-      if (mainContainer) {
-          mainContainer.scrollTo({ top: 0, behavior: 'auto' });
-      } else {
-          window.scrollTo(0, 0);
-      }
+    if (topRef.current) {
+      topRef.current.scrollTop = 0;
+    }
   }, [currentSectionIdx, isCompleted]);
 
   const handleAnswer = (qIdx: number, value: number) => {
@@ -367,7 +364,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
     const recommendations = getRecommendations();
 
     return (
-      <div ref={topRef} className="p-6 pb-32 bg-slate-50 min-h-full animate-fade-in">
+      <div className="p-6 pb-32 bg-slate-50 min-h-full animate-fade-in">
         <div className="flex items-center gap-2 mb-4">
             <button onClick={() => { setIsCompleted(false); setCurrentSectionIdx(0); setAnswers({}); setAiReport(null); }} className="text-slate-400">
                 <ArrowLeft size={20} />
@@ -538,7 +535,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
   }
 
   return (
-    <div ref={topRef} className="flex flex-col h-full bg-white animate-fade-in">
+    <div className="flex flex-col h-full bg-white animate-fade-in">
       {/* Header with Progress */}
       <div className="px-6 pt-6 pb-2 bg-white sticky top-0 z-10">
          <div className="flex justify-between items-end mb-4">
@@ -558,7 +555,7 @@ const LegalHealthCheck: React.FC<LegalHealthCheckProps> = ({ setCurrentView }) =
       </div>
 
       {/* Questionnaire */}
-      <div className="flex-1 overflow-y-auto p-6 pb-32">
+      <div ref={topRef} className="flex-1 overflow-y-auto p-6 pb-32">
          <div className="space-y-6">
             {currentSection.questions.map((q, idx) => {
                const key = `${currentSectionIdx}-${idx}`;
