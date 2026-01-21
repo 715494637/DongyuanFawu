@@ -29,8 +29,8 @@ export const sendMessageToAI = async (message: string, useSearch: boolean = fals
       baseUrl: import.meta.env.VITE_GEMINI_BASE_URL || '',
     },
   });
-  // 复杂诊断使用 Pro 模型，日常对话使用 Flash 模型
-  const modelName = isComplex ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
+  // 统一使用 Flash 模型
+  const modelName = 'gemini-3-flash-preview';
   
   try {
     const systemInstruction = await getSystemInstruction();
