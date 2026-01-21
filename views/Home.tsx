@@ -37,6 +37,58 @@ const Home: React.FC<HomeProps> = ({ setCurrentView }) => {
   const [nextLevel, setNextLevel] = useState<VipLevelConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // 从 localStorage 读取缓存数据
+  const loadFromLocalStorage = () => {
+    try {
+      const cachedUser = localStorage.getItem('dy_cached_user');
+      const cachedStats = localStorage.getItem('dy_cached_stats');
+      const cachedVipLevels = localStorage.getItem('dy_cached_vip_levels');
+      const cacheTimestamp = localStorage.getItem('dy_cache_timestamp');
+
+      // 检查缓存是否过期（5分钟）
+      const isExpired = cacheTimestamp
+        ? Date.now() - parseInt(cacheTimestamp) > 5 * 60 * 1000
+        : true;
+
+      if (!isExpired) {
+        let hasData = false;
+        if (cachedUser) {
+          setCurrentUser(JSON.parse(cachedUser));
+          hasData = true;
+        }
+        if (cachedStats) {
+          setStats(JSON.parse(cachedStats));
+          hasData = true;
+        }
+        if (cachedVipLevels) {
+          setVipLevels(JSON.parse(cachedVipLevels));
+          hasData = true;
+        }
+        if (hasData) {
+          setLoading(false);
+        }
+      }
+    } catch (e) {
+      console.error('读取本地缓存失败:', e);
+    }
+  };
+
+  // 保存数据到 localStorage
+  const saveToLocalStorage = (
+    user?: User | null,
+    statsData?: EnterpriseStats | null,
+    levelsData?: VipLevelConfig[]
+  ) => {
+    try {
+      if (user) localStorage.setItem('dy_cached_user', JSON.stringify(user));
+      if (statsData) localStorage.setItem('dy_cached_stats', JSON.stringify(statsData));
+      if (levelsData) localStorage.setItem('dy_cached_vip_levels', JSON.stringify(levelsData));
+      localStorage.setItem('dy_cache_timestamp', Date.now().toString());
+    } catch (e) {
+      console.error('保存本地缓存失败:', e);
+    }
+  };
+
   // Call Animation State
   const [showCallOverlay, setShowCallOverlay] = useState(false);
   const [callCountdown, setCallCountdown] = useState<number | string | null>(null);
@@ -75,9 +127,11 @@ const Home: React.FC<HomeProps> = ({ setCurrentView }) => {
   };
 
   useEffect(() => {
+    // 1. 优先从 localStorage 加载缓存数据（避免闪烁）
+    loadFromLocalStorage();
+
     const loadData = async () => {
       try {
-        setLoading(true);
         const token = getToken();
 
         // 并行请求：用户信息、统计数据、VIP等级（使用缓存）
@@ -93,8 +147,9 @@ const Home: React.FC<HomeProps> = ({ setCurrentView }) => {
         });
 
         // 设置用户信息
+        let user: User | null = null;
         if (userData) {
-          const user: User = {
+          user = {
             id: userData.id,
             username: userData.username,
             phoneNumber: userData.phone_number,
@@ -118,6 +173,9 @@ const Home: React.FC<HomeProps> = ({ setCurrentView }) => {
         // 处理 VIP 等级
         const levels = Array.isArray(levelsData) ? levelsData : [];
         setVipLevels(levels);
+
+        // 保存到 localStorage
+        saveToLocalStorage(user, statsData, levels);
 
         // 计算当前等级
         if (userData?.enterprise_name && levels.length > 0) {
