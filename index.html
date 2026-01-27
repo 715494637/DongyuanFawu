@@ -1,0 +1,87 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>东元法物 - 数字化物业法律工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      
+      /* 全局字体优化 & 微信适配 */
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+        background-color: #f8fafc;
+        /* 适配 iOS 顶部刘海 */
+        padding-top: env(safe-area-inset-top); 
+        padding-bottom: 0; /* 底部由 Layout 处理 */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        
+        /* 核心修复：禁用下拉刷新和橡皮筋效果，防止误触刷新导致退出登录 */
+        overscroll-behavior-y: none;
+        touch-action: pan-x pan-y;
+        
+        /* 微信特定：禁止字体自动缩放 */
+        -webkit-text-size-adjust: 100% !important;
+        text-size-adjust: 100% !important;
+        /* 移除点击高亮 */
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      /* 修复 iOS 输入框聚焦放大问题 */
+      input, textarea, select {
+        font-size: 16px !important; 
+      }
+
+      /* 电影级噪点纹理 (Film Grain Overlay) */
+      .bg-noise {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 0; 
+        opacity: 0.03;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+      }
+
+      /* 动画定义 */
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+      
+      @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-5px); }
+      }
+      .animate-float { animation: float 4s ease-in-out infinite; }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://aistudiocdn.com/react@^19.2.1",
+        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+        "react/": "https://aistudiocdn.com/react@^19.2.1/",
+        "lucide-react": "https://aistudiocdn.com/lucide-react@^0.559.0"
+      }
+    }
+    </script>
+    <script type="module" src="./index.tsx"></script>
+    <link rel="stylesheet" href="/index.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- 全局噪点层 -->
+    <div class="bg-noise"></div>
+  </body>
+</html>
