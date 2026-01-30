@@ -162,9 +162,13 @@ export interface SystemConfig {
 // Collection CRM Types
 export interface CollectionRecord {
   id: string;
-  ownerName: string;
-  roomNumber: string;
-  amount: number;
+  ownerName?: string;
+  owner_name?: string;
+  debtor_name?: string;
+  roomNumber?: string;
+  room_number?: string;
+  amount?: number;
+  arrears_amount?: string;
   history: CollectionAction[];
 }
 
@@ -194,23 +198,6 @@ export interface EmergencySOP {
   level: 'HIGH' | 'MEDIUM';
   steps: string[];
   tips: string;
-}
-
-// Renovation Check Types
-export interface RenovationRecord {
-  id: string;
-  roomNo: string;
-  manager: string;
-  checks: Record<number, boolean>;
-  signature: string; // base64
-  date: number; // timestamp
-}
-
-// Health Check Types
-export interface HealthCheckSection {
-  id: string;
-  title: string;
-  questions: string[];
 }
 
 // New: Usage Logs for Statistics

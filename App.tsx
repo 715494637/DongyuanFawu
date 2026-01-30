@@ -28,8 +28,16 @@ import LegalHealthCheck from './views/LegalHealthCheck';
 import { PreloadProvider, preloadLoginData } from './views/PreloadContext';
 import { PreloadData } from './views/PreloadContext';
 import { CacheProvider } from './services/DataCacheContext';
+import { useWechatShare } from './hooks/useWechatShare';
 
 const App: React.FC = () => {
+  // 配置微信分享功能
+  useWechatShare({
+    title: '东元法物 - 数字化物业法律工具',
+    desc: '专业的物业法律工具，为您提供法律咨询、文书生成等服务',
+    imgUrl: '/favicon.png'
+  });
+
   const [showSplash, setShowSplash] = useState(() => {
       try {
           const stored = localStorage.getItem('dy_system_config');

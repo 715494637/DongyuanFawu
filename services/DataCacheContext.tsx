@@ -1,35 +1,6 @@
 import React, { createContext, useContext, useCallback, useRef, useEffect, type ReactNode } from 'react';
 
 // ============================================================================
-// 全局缓存变量（非组件环境使用）
-// ============================================================================
-
-let globalCacheInstance: CacheContextValue | null = null;
-
-/**
- * 设置全局缓存实例（由 CacheProvider 在挂载时调用）
- */
-export const setGlobalCache = (cache: CacheContextValue) => {
-  globalCacheInstance = cache;
-};
-
-/**
- * 获取全局缓存实例
- */
-const getGlobalCache = (): CacheContextValue => {
-  if (!globalCacheInstance) {
-    return {
-      getCache: () => null,
-      setCache: () => {},
-      invalidate: () => {},
-      invalidateUser: () => {},
-      clear: () => {},
-    };
-  }
-  return globalCacheInstance;
-};
-
-// ============================================================================
 // 类型定义
 // ============================================================================
 

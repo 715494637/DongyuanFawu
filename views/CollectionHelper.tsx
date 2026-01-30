@@ -105,7 +105,7 @@ const CollectionHelper: React.FC = () => {
 
   const handleCalculatePenalty = () => {
     if (!selectedDebtor) return;
-    const principal = selectedDebtor.amount;
+    const principal = selectedDebtor.amount || selectedDebtor.arrears_amount || 0;
     const days = parseInt(calcDays) || 0;
     const rate = parseFloat(calcRate) || 0;
 
@@ -126,8 +126,8 @@ const CollectionHelper: React.FC = () => {
     // Check if we have calculated penalty
     const hasPenalty = calcResult !== null;
     const amountStr = hasPenalty
-        ? `${selectedDebtor.amount}元（另含违约金${calcResult?.penalty}元，共计${calcResult?.total}元）`
-        : `${selectedDebtor.amount}元`;
+        ? `${(selectedDebtor.amount || selectedDebtor.arrears_amount || 0)}元（另含违约金${calcResult?.penalty}元，共计${calcResult?.total}元）`
+        : `${(selectedDebtor.amount || selectedDebtor.arrears_amount || 0)}元`;
 
     if (type === 'REMINDER') {
         text = `【温馨提示】尊敬的${selectedDebtor.ownerName}业主（房号${selectedDebtor.roomNumber}）：您好。截至${date}，您暂欠物业费${amountStr}。物业服务是维持小区运转的基础，请您尽快缴纳。`;
@@ -162,7 +162,7 @@ const CollectionHelper: React.FC = () => {
                 </div>
                 <div className="bg-blue-50 p-4 rounded-2xl min-w-[140px] border border-blue-100">
                     <span className="text-[10px] text-blue-400 font-bold uppercase">总欠费金额</span>
-                    <div className="text-2xl font-black text-blue-600 mt-1">¥ {(debtors.reduce((sum, d) => sum + (d.amount || 0), 0) / 10000).toFixed(1)} <span className="text-xs">万</span></div>
+                    <div className="text-2xl font-black text-blue-600 mt-1">¥ {(debtors.reduce((sum, d) => sum + ((d.amount || d.arrears_amount) || 0), 0) / 10000).toFixed(1)} <span className="text-xs">万</span></div>
                 </div>
             </div>
         </div>
@@ -180,8 +180,8 @@ const CollectionHelper: React.FC = () => {
                             <div className="flex items-center gap-3">
                                 <div className="bg-slate-100 p-2.5 rounded-full text-slate-500"><User size={20}/></div>
                                 <div>
-                                    <h4 className="font-bold text-slate-800">{d.room_number || d.roomNumber} {d.owner_name || d.ownerName}</h4>
-                                    <p className="text-xs text-slate-400 mt-0.5">欠费: <span className="text-red-500 font-bold">¥{d.amount}</span></p>
+                                    <h4 className="font-bold text-slate-800">{d.room_number || d.roomNumber} {d.owner_name || d.debtor_name || d.ownerName}</h4>
+                                    <p className="text-xs text-slate-400 mt-0.5">欠费: <span className="text-red-500 font-bold">¥{d.amount || d.arrears_amount || '0'}</span></p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -209,8 +209,8 @@ const CollectionHelper: React.FC = () => {
                 <div className="bg-white p-6 shadow-sm flex items-center gap-4 sticky top-0 z-10">
                     <button onClick={() => setSelectedDebtor(null)} className="p-2 bg-slate-100 rounded-full"><ChevronRight className="rotate-180" size={20}/></button>
                     <div>
-                        <h3 className="font-black text-lg">{selectedDebtor.owner_name || selectedDebtor.ownerName}</h3>
-                        <p className="text-xs text-slate-400">{selectedDebtor.room_number || selectedDebtor.roomNumber} · 欠费 ¥{selectedDebtor.amount}</p>
+                        <h3 className="font-black text-lg">{selectedDebtor.owner_name || selectedDebtor.debtor_name || selectedDebtor.ownerName}</h3>
+                        <p className="text-xs text-slate-400">{selectedDebtor.room_number || selectedDebtor.roomNumber} · 欠费 ¥{selectedDebtor.amount || selectedDebtor.arrears_amount || '0'}</p>
                     </div>
                 </div>
 

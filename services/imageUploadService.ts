@@ -93,4 +93,3 @@ class ImageUploadService {
 
 // 导出单例实例
 export const imageUploadService = new ImageUploadService();
-export default imageUploadService;

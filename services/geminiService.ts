@@ -71,7 +71,7 @@ export const generateImage = async (prompt: string): Promise<string | null> => {
     console.error("Image Generation Error:", error);
     return null;
   }
-};
+}
 
 /**
  * AI 语音合成接口

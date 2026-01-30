@@ -882,13 +882,6 @@ export const api = {
 let globalCache: CacheContextValue | null = null;
 
 /**
- * 设置全局缓存实例（由 CacheProvider 在挂载时调用）
- */
-export const setGlobalCache = (c: CacheContextValue) => {
-  globalCache = c;
-};
-
-/**
  * 获取全局缓存实例
  */
 const getGlobalCache = (): CacheContextValue => {
