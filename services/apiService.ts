@@ -873,6 +873,16 @@ export const api = {
       body: JSON.stringify({ ai_kb: data.prompt })
     });
   },
+
+  // ============ 微信 JS-SDK ============
+  async getWechatConfig(url: string) {
+    const res = await fetch(`${API_BASE}/wechat/jsapi-config?url=${encodeURIComponent(url)}`);
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || '获取微信配置失败');
+    }
+    return res.json();
+  },
 };
 
 // ============================================================================

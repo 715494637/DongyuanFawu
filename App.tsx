@@ -34,8 +34,8 @@ const App: React.FC = () => {
   // 配置微信分享功能
   useWechatShare({
     title: '东元法物 - 数字化物业法律工具',
-    desc: '专业的物业法律工具，为您提供法律咨询、文书生成等服务',
-    imgUrl: '/favicon.png'
+    desc: '专业的物业法律工具，为您提供法律咨询、文书生成等服务'
+    // imgUrl 会自动使用默认值: `${window.location.origin}/favicon.png`
   });
 
   const [showSplash, setShowSplash] = useState(() => {
@@ -52,6 +52,8 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.HOME);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // 滚动位置存储
+  const scrollPositions = useRef<Record<string, number>>({});
 
   // 预加载登录数据（在开屏期间并行请求）
   const [preloadedData, setPreloadedData] = useState<PreloadData | null>(null);
@@ -164,9 +166,40 @@ const App: React.FC = () => {
     }
   }, [showSplash]);
 
+  // 滚动位置记忆功能
+  useEffect(() => {
+    const handleScroll = () => {
+      if (scrollRef.current) {
+        scrollPositions.current[currentView] = scrollRef.current.scrollTop;
+      }
+    };
+
+    const scrollElement = scrollRef.current;
+    if (scrollElement) {
+      scrollElement.addEventListener('scroll', handleScroll, { passive: true });
+    }
+
+    return () => {
+      if (scrollElement) {
+        scrollElement.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, [currentView]);
+
+  // 页面切换时恢复滚动位置
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = 0;
+      const savedPosition = scrollPositions.current[currentView];
+      if (savedPosition !== undefined) {
+        // 使用 setTimeout 确保 DOM 已渲染完成
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = savedPosition;
+          }
+        });
+      } else {
+        scrollRef.current.scrollTop = 0;
+      }
     }
   }, [currentView]);
 

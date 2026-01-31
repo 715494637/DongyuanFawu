@@ -107,7 +107,7 @@ const Diagnosis: React.FC<DiagnosisProps> = ({ setCurrentView }) => {
     setStep(2);
 
     // 优化 Prompt：强调输出结构，减少多余符号，但前端也会再次清洗
-    const prompt = `你现在是东元物业法务中心的首席律师。请针对以下物业纠纷进行深度诊断：
+    const prompt = `你是东元法物的智能法律助手。请针对以下物业纠纷进行深度诊断：
     案情描述：${userInput}
     
     请按以下结构输出（不要使用Markdown代码块，直接分段）：

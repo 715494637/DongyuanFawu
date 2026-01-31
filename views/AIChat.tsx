@@ -4,6 +4,7 @@ import { Send, Bot, User, Volume2, Globe, Sparkles, Headphones } from 'lucide-re
 import { ChatMessage } from '../types';
 import { sendMessageToAI, textToSpeech, decodeAudioData } from '../services/geminiService';
 import ConsultationModal from '../components/ConsultationModal';
+import { SimpleMarkdown } from '../components/SimpleMarkdown';
 import { api } from '../services/apiService';
 
 const AIChat: React.FC<{ onClose: () => void }> = ({ onClose }) => {
@@ -128,9 +129,13 @@ const AIChat: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     ? 'bg-orange-500 text-white rounded-tr-none' 
                     : 'bg-white text-gray-700 rounded-tl-none border border-gray-100'
                 }`}>
-                  {msg.text.split('\n').map((line, i) => (
-                    <p key={i} className={i !== 0 ? 'mt-2' : ''}>{line}</p>
-                  ))}
+                  {msg.role === 'user' ? (
+                    msg.text.split('\n').map((line, i) => (
+                      <p key={i} className={i !== 0 ? 'mt-2' : ''}>{line}</p>
+                    ))
+                  ) : (
+                    <SimpleMarkdown content={msg.text} />
+                  )}
                   
                   {msg.role === 'model' && (
                     <button 

@@ -96,7 +96,6 @@ const Layout: React.FC<LayoutProps> = ({ currentView, setCurrentView, children, 
     ViewState.RENOVATION_CHECK,
     ViewState.SCRIPT_KIT,
     ViewState.EMERGENCY_SOP,
-    ViewState.RIGHTS_CENTER,
     ViewState.LEGAL_HEALTH_CHECK
   ];
 

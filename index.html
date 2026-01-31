@@ -6,10 +6,12 @@
     <link rel="icon" type="image/png" href="/favicon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="format-detection" content="telephone=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>东元法物 - 数字化物业法律工具</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 开发环境使用 CDN Tailwind，生产环境应使用 PostCSS 插件 -->
+    <script src="https://cdn.tailwindcss.com?plugins=aspect-ratio,container-queries"></script>
     <script src="https://res.wx.qq.com/open/js/jweixin-1.6.0.js"></script>
     <style>
       .no-scrollbar::-webkit-scrollbar { display: none; }

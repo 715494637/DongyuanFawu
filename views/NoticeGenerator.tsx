@@ -219,7 +219,7 @@ const NoticeGenerator: React.FC = () => {
            </div>
            <div className="space-y-1">
               <p className="text-[11px] text-orange-800 font-black uppercase">法务贴士</p>
-              <p className="text-[10px] text-orange-700 leading-relaxed font-medium">本工具提供的公告已由东元法务部审核合规。复制后建议直接粘贴至项目“业主服务群”或通过“微社区”发布。</p>
+              <p className="text-[10px] text-orange-700 leading-relaxed font-medium">本公告由人工智能生成，仅供参考。</p>
            </div>
         </div>
       </div>

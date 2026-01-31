@@ -112,6 +112,7 @@ const RightsCenter: React.FC<RightsCenterProps> = ({ setCurrentView }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [showConsultModal, setShowConsultModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [submittedLevels, setSubmittedLevels] = useState<Set<string>>(new Set());
 
   const getToken = () => sessionStorage.getItem('token') || localStorage.getItem('token') || '';
 
@@ -160,6 +161,17 @@ const RightsCenter: React.FC<RightsCenterProps> = ({ setCurrentView }) => {
 
       const projectsData = await api.getSpecialProjects();
       setAllProjects(Array.isArray(projectsData) ? projectsData : []);
+
+      // 读取已提交的挡位ID列表
+      const stored = sessionStorage.getItem('submittedLevels');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          setSubmittedLevels(new Set(parsed));
+        } catch (e) {
+          console.error('解析已提交挡位失败:', e);
+        }
+      }
 
       if (currentUser) {
         try {
@@ -210,6 +222,8 @@ const RightsCenter: React.FC<RightsCenterProps> = ({ setCurrentView }) => {
     // 只有当前等级的专项服务才能操作
     if (!activeLevel || activeLevel.id !== currentLevelId) return;
     if (status !== 'UNLOCKED') return;
+    // 挡位已提交过专项服务，不能再选择
+    if (submittedLevels.has(activeLevel.id)) return;
     if (selectedProjects.includes(id)) {
       setSelectedProjects(prev => prev.filter(p => p !== id));
     } else {
@@ -219,6 +233,7 @@ const RightsCenter: React.FC<RightsCenterProps> = ({ setCurrentView }) => {
 
   const handleSaveSelection = async () => {
     if (!user) return;
+    if (!activeLevel) return;
     if (selectedProjects.length === 0) {
       alert('请至少选择一个专项服务');
       return;
@@ -226,6 +241,10 @@ const RightsCenter: React.FC<RightsCenterProps> = ({ setCurrentView }) => {
     setIsSaving(true);
     try {
       await api.selectProjects(selectedProjects, getToken());
+      // 记录当前挡位已提交
+      const newSubmitted = new Set([...submittedLevels, activeLevel.id]);
+      setSubmittedLevels(newSubmitted);
+      sessionStorage.setItem('submittedLevels', JSON.stringify([...newSubmitted]));
       alert('申请已提交！请等待管理员审批，审批通过后服务将正式开通。');
       setSelectedProjects([]);
     } catch (err) {
@@ -377,20 +396,23 @@ const RightsCenter: React.FC<RightsCenterProps> = ({ setCurrentView }) => {
                       const isSelected = selectedProjects.includes(proj.id);
                       const isUnlocked = status === 'UNLOCKED';
                       const isCurrentLevel = activeLevel.id === currentLevelId;
+                      const isSubmitted = submittedLevels.has(activeLevel.id);
                       const remainingQuota = Math.max(0, activeLevel.selectable_projects_count - selectedProjects.length);
-                      // 只有当前等级才能操作：已选中的可以取消，未选中的需要剩余配额
-                      const canSelect = isUnlocked && isCurrentLevel && (isSelected || remainingQuota > 0);
-                      const disabled = !isUnlocked || !isCurrentLevel || (!isSelected && remainingQuota <= 0);
+                      // 只有当前等级且未提交过才能操作：已选中的可以取消，未选中的需要剩余配额
+                      const canSelect = isUnlocked && isCurrentLevel && !isSubmitted && (isSelected || remainingQuota > 0);
+                      const disabled = !isUnlocked || !isCurrentLevel || isSubmitted || (!isSelected && remainingQuota <= 0);
 
                       const cardClass = !isUnlocked
                         ? 'p-4 rounded-xl border bg-white/5 border-white/5 opacity-50 flex flex-col gap-3 transition-all'
+                        : isSubmitted
+                        ? 'p-4 rounded-xl border bg-green-500/5 border-green-500/20 opacity-60 flex flex-col gap-3 transition-all'
                         : isSelected
                         ? 'p-4 rounded-xl border bg-yellow-500/10 border-yellow-500 flex flex-col gap-3 transition-all cursor-pointer'
                         : disabled
                         ? 'p-4 rounded-xl border bg-white/5 border-white/5 opacity-50 flex flex-col gap-3 transition-all'
                         : 'p-4 rounded-xl border bg-white/5 border-white/5 hover:bg-white/10 flex flex-col gap-3 transition-all cursor-pointer';
-                      const titleClass = isSelected ? 'text-xs font-bold text-yellow-500' : disabled ? 'text-xs font-bold text-slate-500' : 'text-xs font-bold text-slate-300';
-                      const iconClass = isSelected ? 'text-yellow-500' : 'text-slate-600';
+                      const titleClass = isSelected ? 'text-xs font-bold text-yellow-500' : isSubmitted ? 'text-xs font-bold text-green-500' : disabled ? 'text-xs font-bold text-slate-500' : 'text-xs font-bold text-slate-300';
+                      const iconClass = isSelected ? 'text-yellow-500' : isSubmitted ? 'text-green-500' : 'text-slate-600';
 
                       return (
                         <div key={proj.id} className={cardClass} onClick={() => canSelect && handleToggleProject(proj.id)}>
@@ -400,7 +422,9 @@ const RightsCenter: React.FC<RightsCenterProps> = ({ setCurrentView }) => {
                               <div className="text-[10px] text-slate-500 mt-0.5">{proj.description}</div>
                             </div>
                             <div className={iconClass}>
-                              {isSelected
+                              {isSubmitted
+                                ? <CheckCircle size={18} fill="rgba(34,197,94,0.3)" className="text-green-500" />
+                                : isSelected
                                 ? <CheckCircle size={18} fill={GOLD} className="text-black" />
                                 : disabled
                                 ? <Lock size={16} className="text-slate-600" />
@@ -415,17 +439,25 @@ const RightsCenter: React.FC<RightsCenterProps> = ({ setCurrentView }) => {
 
                   {status === 'UNLOCKED' && activeLevel.id === currentLevelId && (
                     <div className="space-y-3 mt-4">
-                      <button
-                        onClick={handleSaveSelection}
-                        disabled={isSaving || selectedProjects.length === 0}
-                        className="w-full py-3 rounded-xl font-black text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{ backgroundColor: GOLD, color: 'black' }}
-                      >
-                        {isSaving ? '保存中...' : `确认选择专项服务${selectedProjects.length > 0 ? `（${selectedProjects.length}项）` : ''}`}
-                      </button>
-                      <button onClick={handleRequestMoreServices} className="w-full py-3 bg-white/5 text-slate-400 font-bold text-xs rounded-xl border border-dashed border-slate-700 hover:text-white hover:border-slate-500 transition-colors flex items-center justify-center gap-2">
-                        <PlusCircle size={14} />申请增加额外服务
-                      </button>
+                      {submittedLevels.has(activeLevel.id) ? (
+                        <div className="w-full py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/30 text-green-500">
+                          <CheckCircle size={16} />专项服务已提交，等待审批
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            onClick={handleSaveSelection}
+                            disabled={isSaving || selectedProjects.length === 0}
+                            className="w-full py-3 rounded-xl font-black text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{ backgroundColor: GOLD, color: 'black' }}
+                          >
+                            {isSaving ? '保存中...' : `确认选择专项服务${selectedProjects.length > 0 ? `（${selectedProjects.length}项）` : ''}`}
+                          </button>
+                          <button onClick={handleRequestMoreServices} className="w-full py-3 bg-white/5 text-slate-400 font-bold text-xs rounded-xl border border-dashed border-slate-700 hover:text-white hover:border-slate-500 transition-colors flex items-center justify-center gap-2">
+                            <PlusCircle size={14} />申请增加额外服务
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>

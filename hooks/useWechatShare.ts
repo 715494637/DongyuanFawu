@@ -5,6 +5,7 @@
  */
 
 import { useEffect } from 'react';
+import { api } from '../services/apiService';
 
 // 微信 JS-SDK 类型定义
 interface WeChatConfig {
@@ -62,15 +63,7 @@ const getCurrentUrl = (): string => {
  * 从后端获取微信 JS-SDK 配置
  */
 const fetchWechatConfig = async (url: string): Promise<WeChatConfig> => {
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-  const response = await fetch(`${apiUrl}/api/v1/wechat/jsapi-config?url=${encodeURIComponent(url)}`);
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || '获取微信配置失败');
-  }
-
-  return response.json();
+  return api.getWechatConfig(url);
 };
 
 /**
@@ -99,7 +92,8 @@ export const useWechatShare = (options: {
       return;
     }
 
-    const { title = '东元法物 - 数字化物业法律工具', desc = '专业的物业法律工具，为您提供法律咨询、文书生成等服务', imgUrl = '/favicon.png' } = options;
+    const defaultImgUrl = `${window.location.origin}/favicon.png`;
+    const { title = '东元法物 - 数字化物业法律工具', desc = '专业的物业法律工具，为您提供法律咨询、文书生成等服务', imgUrl = defaultImgUrl } = options;
 
     const configureWechatShare = async () => {
       try {
@@ -123,8 +117,6 @@ export const useWechatShare = (options: {
 
         // 配置成功回调
         window.wx.ready(() => {
-          console.log('微信 JS-SDK 配置成功');
-
           const shareData: WeChatShareData = {
             title,
             desc,
@@ -133,24 +125,10 @@ export const useWechatShare = (options: {
           };
 
           // 分享给朋友（新接口）
-          window.wx.updateAppMessageShareData(shareData, () => {
-            console.log('分享给朋友配置成功');
-          });
+          window.wx.updateAppMessageShareData(shareData);
 
           // 分享到朋友圈（新接口）
-          window.wx.updateTimelineShareData(shareData, () => {
-            console.log('分享到朋友圈配置成功');
-          });
-
-          // 兼容旧版微信（分享给朋友）
-          window.wx.onMenuShareAppMessage(shareData);
-
-          // 兼容旧版微信（分享到朋友圈）
-          window.wx.onMenuShareTimeline({
-            title,
-            link: window.location.href,
-            imgUrl
-          });
+          window.wx.updateTimelineShareData(shareData);
         });
 
         // 配置失败回调

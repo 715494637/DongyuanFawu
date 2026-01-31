@@ -1,4 +1,34 @@
-import React, { createContext, useContext, useCallback, useRef, useEffect, type ReactNode } from 'react';
+import React, { createContext, useContext, useCallback, useRef, useMemo, type ReactNode } from 'react';
+
+// ============================================================================
+// 全局缓存变量（非组件环境使用）
+// ============================================================================
+
+let globalCacheInstance: CacheContextValue | null = null;
+
+/**
+ * 设置全局缓存实例（由 CacheProvider 在挂载时调用）
+ * 注意：此函数仅内部使用，不导出
+ */
+const setGlobalCache = (cache: CacheContextValue) => {
+  globalCacheInstance = cache;
+};
+
+/**
+ * 获取全局缓存实例
+ */
+const getGlobalCache = (): CacheContextValue => {
+  if (!globalCacheInstance) {
+    return {
+      getCache: () => null,
+      setCache: () => {},
+      invalidate: () => {},
+      invalidateUser: () => {},
+      clear: () => {},
+    };
+  }
+  return globalCacheInstance;
+};
 
 // ============================================================================
 // 类型定义
@@ -43,7 +73,7 @@ interface CacheConfig {
 /**
  * 缓存上下文值
  */
-interface CacheContextValue {
+export interface CacheContextValue {
   /** 获取缓存数据 */
   getCache<T>(key: string): T | null;
   /** 设置缓存数据 */
@@ -181,18 +211,17 @@ export const CacheProvider: React.FC<CacheProviderProps> = ({ children }) => {
     window.dispatchEvent(new CustomEvent('cache-cleared'));
   }, []);
 
-  const value: CacheContextValue = {
+  // 使用 useMemo 确保值在渲染阶段就可用，避免 React 19 中 useEffect 时序问题
+  const value: CacheContextValue = useMemo<CacheContextValue>(() => ({
     getCache,
     setCache,
     invalidate,
     invalidateUser,
     clear,
-  };
+  }), [getCache, setCache, invalidate, invalidateUser, clear]);
 
-  // 设置全局缓存实例，供非组件代码使用（仅首次渲染时执行）
-  useEffect(() => {
-    setGlobalCache(value);
-  }, [value]);
+  // 立即设置全局缓存实例（不再等待 useEffect，确保在渲染阶段就可用）
+  setGlobalCache(value);
 
   return (
     <CacheContext.Provider value={value}>

@@ -37,6 +37,9 @@ const Home: React.FC<HomeProps> = ({ setCurrentView }) => {
   const [nextLevel, setNextLevel] = useState<VipLevelConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // ✅ 正确：在组件顶层调用 useCache()
+  const cache = useCache();
+
   // 从 localStorage 读取缓存数据
   const loadFromLocalStorage = () => {
     try {
@@ -208,8 +211,6 @@ const Home: React.FC<HomeProps> = ({ setCurrentView }) => {
 
     // Daily Tip（每日锦囊缓存24小时）
     const fetchTip = async () => {
-      const cache = useCache();
-
       // 先检查缓存
       const cachedTip = cache.getCache<{title: string; content: string}>(CACHE_KEYS.DAILY_TIP);
       if (cachedTip) {
@@ -231,7 +232,7 @@ const Home: React.FC<HomeProps> = ({ setCurrentView }) => {
       } catch (e) {}
     };
     fetchTip();
-  }, []);
+  }, [cache]);
 
   const handleLawyerCall = () => {
     if (!currentUser) return;
