@@ -1,0 +1,243 @@
+"""
+用户管理领域 - 业务逻辑服务
+
+提供用户查询、更新、审批、删除等管理功能
+"""
+
+from typing import List, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, case
+from fastapi import HTTPException, status
+import bcrypt
+
+from app.domains.auth.models import User
+from app.domains.auth.schemas import UserUpdate
+from app.utils import logger
+
+
+def get_password_hash(password: str) -> str:
+    """密码哈希 - 使用 bcrypt"""
+    if not isinstance(password, str):
+        password = str(password)
+    if not password:
+        password = "default"
+    password = password[:72]  # bcrypt 限制
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """验证密码"""
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode('utf-8'),
+            hashed_password.encode('utf-8')
+        )
+    except Exception:
+        return False
+
+
+class UserService:
+    """用户管理业务逻辑服务"""
+
+    @staticmethod
+    async def get_all_users(
+        db: AsyncSession,
+        skip: int = 0,
+        limit: int = 100
+    ) -> List[User]:
+        """
+        获取用户列表（支持分页）
+
+        Args:
+            db: 异步数据库会话
+            skip: 跳过的记录数
+            limit: 返回的最大记录数
+
+        Returns:
+            List[User]: 用户列表
+        """
+        result = await db.execute(
+            select(User)
+            .offset(skip)
+            .limit(limit)
+        )
+        users = result.scalars().all()
+        logger.info(f"获取用户列表，共 {len(users)} 个用户 (skip={skip}, limit={limit})")
+        return users
+
+    @staticmethod
+    async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[User]:
+        """
+        获取单个用户信息
+
+        Args:
+            db: 异步数据库会话
+            user_id: 用户ID
+
+        Returns:
+            User: 用户对象，不存在返回None
+        """
+        result = await db.execute(select(User).where(User.id == user_id))
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def approve_user(db: AsyncSession, user_id: str) -> User:
+        """
+        审批用户
+
+        Args:
+            db: 异步数据库会话
+            user_id: 用户ID
+
+        Returns:
+            User: 审批后的用户对象
+
+        Raises:
+            HTTPException: 用户不存在时抛出
+        """
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            logger.error(f"用户 {user_id} 不存在")
+            raise HTTPException(status_code=404, detail="用户不存在")
+
+        if user.approval_status == "APPROVED":
+            logger.warning(f"用户 {user.username} 已经是审批通过状态")
+            raise HTTPException(status_code=400, detail="用户已审批")
+
+        user.approval_status = "APPROVED"
+        await db.commit()
+        await db.refresh(user)
+
+        logger.info(f"用户 {user.username} 审批成功")
+        return user
+
+    @staticmethod
+    async def update_user(
+        db: AsyncSession,
+        user_id: str,
+        user_data: UserUpdate,
+        is_admin: bool = False
+    ) -> User:
+        """
+        更新用户信息
+
+        Args:
+            db: 异步数据库会话
+            user_id: 用户ID
+            user_data: 更新数据
+            is_admin: 是否为管理员
+
+        Returns:
+            User: 更新后的用户对象
+
+        Raises:
+            HTTPException: 用户不存在或权限不足时抛出
+        """
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            logger.error(f"用户 {user_id} 不存在")
+            raise HTTPException(status_code=404, detail="用户不存在")
+
+        # 普通用户只能更新用户名、手机号和头像
+        if not is_admin:
+            allowed_fields = {"username", "phone_number", "avatar_url"}
+            for field in user_data.model_dump(exclude_unset=True):
+                if field not in allowed_fields:
+                    logger.warning(f"普通用户尝试更新禁止字段 {field}")
+                    raise HTTPException(status_code=403, detail=f"普通用户不能更新{field}字段")
+
+        # 检查用户名是否已存在（如果要更新的话）
+        if user_data.username and user_data.username != user.username:
+            result = await db.execute(
+                select(User).where(User.username == user_data.username, User.id != user_id)
+            )
+            if result.scalar_one_or_none():
+                logger.warning(f"用户名 {user_data.username} 已存在")
+                raise HTTPException(status_code=400, detail="用户名已存在")
+
+        # 更新用户信息
+        update_data = user_data.model_dump(exclude_unset=True)
+
+        # 处理密码更新（需要哈希）
+        if update_data.get('password'):
+            password_value = update_data['password']
+            if isinstance(password_value, str) and password_value.strip():
+                user.password = get_password_hash(password_value)
+            del update_data['password']
+
+        # 更新其他字段
+        for field, value in update_data.items():
+            setattr(user, field, value)
+
+        await db.commit()
+        await db.refresh(user)
+
+        logger.info(f"用户 {user.username} 信息更新成功")
+        return user
+
+    @staticmethod
+    async def delete_user(db: AsyncSession, user_id: str) -> None:
+        """
+        删除用户
+
+        Args:
+            db: 异步数据库会话
+            user_id: 用户ID
+
+        Raises:
+            HTTPException: 用户不存在时抛出
+        """
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            logger.error(f"用户 {user_id} 不存在")
+            raise HTTPException(status_code=404, detail="用户不存在")
+
+        username = user.username
+        await db.delete(user)
+        await db.commit()
+
+        logger.info(f"用户 {username} 删除成功")
+
+    @staticmethod
+    async def get_user_stats(db: AsyncSession) -> dict:
+        """
+        获取用户统计信息
+
+        Args:
+            db: 异步数据库会话
+
+        Returns:
+            dict: 包含用户统计信息的字典
+                - total_users: 总用户数
+                - approved_users: 已审批用户数
+                - pending_users: 待审批用户数
+                - admin_users: 管理员数量
+                - regular_users: 普通用户数量
+        """
+        result = await db.execute(
+            select(
+                func.count(User.id).label('total_users'),
+                func.sum(case((User.approval_status == "APPROVED", 1), else_=0)).label('approved_users'),
+                func.sum(case((User.approval_status == "PENDING", 1), else_=0)).label('pending_users'),
+                func.sum(case((User.role == "ADMIN", 1), else_=0)).label('admin_users'),
+            )
+        )
+        row = result.one()
+
+        stats = {
+            "total_users": row.total_users,
+            "approved_users": row.approved_users or 0,
+            "pending_users": row.pending_users or 0,
+            "admin_users": row.admin_users or 0,
+            "regular_users": (row.total_users or 0) - (row.admin_users or 0)
+        }
+
+        logger.info(f"获取用户统计信息: {stats}")
+        return stats

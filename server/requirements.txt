@@ -1,0 +1,32 @@
+# 东元法物后端依赖
+# 使用 pip 安装: pip install -r requirements.txt
+# 推荐使用 uv: uv pip install -r requirements.txt
+
+# Web 框架
+fastapi==0.122.0
+uvicorn[standard]==0.34.0
+
+# 数据库
+sqlalchemy[asyncio]==2.0.37
+aiomysql==0.2.0
+
+# 认证与安全
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.20
+
+# 数据验证与配置
+pydantic==2.10.5
+pydantic-settings==2.7.1
+
+# 日志
+loguru==0.7.3
+
+# HTTP 客户端
+httpx==0.27.0
+
+# 加密
+cryptography>=42.0.0
+
+# Google Gen AI
+google-genai>=1.60.0
