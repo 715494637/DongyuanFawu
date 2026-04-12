@@ -24,6 +24,7 @@ class SystemConfig(Base):
     splash_image = Column(Text)
     enable_splash_screen = Column(Boolean, default=True)
     renovation_items = Column(Text)
+    lawyer_phone_number = Column(String(50))
 
 
 # 别名，用于向后兼容

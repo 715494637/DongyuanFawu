@@ -5,7 +5,7 @@
 """
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional
+from typing import Optional, Literal
 
 
 class UserBase(BaseModel):
@@ -20,6 +20,15 @@ class UserCreate(UserBase):
     password: str
 
 
+class AdminUserCreate(BaseModel):
+    """管理员创建用户模型"""
+    username: str
+    password: str
+    phone_number: Optional[str] = None
+    role: Literal["USER", "EMPLOYEE", "MANAGER", "EXECUTIVE"] = "USER"
+    enterprise_name: Optional[str] = None
+
+
 class UserUpdate(BaseModel):
     """用户更新模型"""
     username: Optional[str] = None
@@ -28,6 +37,13 @@ class UserUpdate(BaseModel):
     avatar_url: Optional[str] = None
     role: Optional[str] = None
     approval_status: Optional[str] = None
+
+
+class QuotaUpdate(BaseModel):
+    """用户额度更新模型"""
+    operation: Literal["set", "add"] = "set"
+    lawyer_letters: Optional[int] = None
+    consultations: Optional[int] = None
 
 
 class UserResponse(UserBase):

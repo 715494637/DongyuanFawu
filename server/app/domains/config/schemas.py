@@ -11,6 +11,7 @@ class SystemConfigBase(BaseModel):
     enterprise_logo: Optional[str] = None
     splash_image: Optional[str] = None
     enable_splash_screen: bool = True
+    lawyer_phone_number: Optional[str] = None
 
 
 class SystemConfigUpdate(SystemConfigBase):

@@ -584,13 +584,13 @@ export const api = {
 
   // ============ 话术库 - 管理端 ============
   async getAdminScripts(token: string) {
-    return fetchWithErrorHandler(`${API_BASE}/admin/scripts`, {
+    return fetchWithErrorHandler(`${API_BASE}/scripts`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
   },
 
   async createAdminScript(data: any, token: string) {
-    return fetchWithErrorHandler(`${API_BASE}/admin/scripts`, {
+    return fetchWithErrorHandler(`${API_BASE}/scripts`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -601,7 +601,7 @@ export const api = {
   },
 
   async updateAdminScript(scriptId: string, data: any, token: string) {
-    return fetchWithErrorHandler(`${API_BASE}/admin/scripts/${scriptId}`, {
+    return fetchWithErrorHandler(`${API_BASE}/scripts/${scriptId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -612,7 +612,7 @@ export const api = {
   },
 
   async deleteAdminScript(scriptId: string, token: string) {
-    return fetchWithErrorHandler(`${API_BASE}/admin/scripts/${scriptId}`, {
+    return fetchWithErrorHandler(`${API_BASE}/scripts/${scriptId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
     });

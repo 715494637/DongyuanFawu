@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.core.dependencies import get_current_user, get_current_admin
 from app.domains.auth.models import User
-from app.domains.auth.schemas import UserResponse, UserUpdate
+from app.domains.auth.schemas import UserResponse, UserUpdate, AdminUserCreate, QuotaUpdate
 from app.domains.users.service import UserService
 
 router = APIRouter()
@@ -25,6 +25,27 @@ async def get_current_user_info(
     API 兼容性：路径 /api/v1/users/me 保持不变
     """
     return UserResponse.model_validate(current_user)
+
+
+@router.post("", response_model=UserResponse, tags=["用户管理"])
+async def create_user_by_admin(
+    user_data: AdminUserCreate,
+    current_admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    管理员创建用户
+
+    Args:
+        user_data: 用户创建数据（用户名、密码、角色等）
+        current_admin: 当前管理员用户
+        db: 异步数据库会话
+
+    Returns:
+        UserResponse: 创建的用户信息
+    """
+    user = await UserService.create_user_by_admin(db, user_data)
+    return UserResponse.model_validate(user)
 
 
 @router.get("/stats/overview", tags=["用户管理"])
@@ -101,6 +122,29 @@ async def approve_user(
     """
     await UserService.approve_user(db, user_id)
     return {"message": "用户审批成功"}
+
+
+@router.put("/{user_id}/quota", response_model=UserResponse, tags=["用户管理"])
+async def update_user_quota(
+    user_id: str,
+    quota_data: QuotaUpdate,
+    current_admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    更新用户额度（管理员）
+
+    Args:
+        user_id: 用户ID
+        quota_data: 额度更新数据（operation, lawyer_letters, consultations）
+        current_admin: 当前管理员用户
+        db: 异步数据库会话
+
+    Returns:
+        UserResponse: 更新后的用户信息
+    """
+    user = await UserService.update_user_quota(db, user_id, quota_data)
+    return UserResponse.model_validate(user)
 
 
 @router.put("/{user_id}", response_model=UserResponse, tags=["用户管理"])

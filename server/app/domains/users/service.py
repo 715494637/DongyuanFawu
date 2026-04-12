@@ -11,7 +11,7 @@ from fastapi import HTTPException, status
 import bcrypt
 
 from app.domains.auth.models import User
-from app.domains.auth.schemas import UserUpdate
+from app.domains.auth.schemas import UserUpdate, AdminUserCreate, QuotaUpdate
 from app.utils import logger
 
 
@@ -39,6 +39,107 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 class UserService:
     """用户管理业务逻辑服务"""
+
+    @staticmethod
+    async def create_user_by_admin(
+        db: AsyncSession,
+        user_data: AdminUserCreate
+    ) -> User:
+        """
+        管理员创建用户
+
+        Args:
+            db: 异步数据库会话
+            user_data: 创建用户数据
+
+        Returns:
+            User: 创建的用户对象
+
+        Raises:
+            HTTPException: 用户名已存在时抛出
+        """
+        # 检查用户名是否已存在
+        result = await db.execute(
+            select(User).where(User.username == user_data.username)
+        )
+        if result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="用户名已存在")
+
+        # 检查手机号是否已存在
+        if user_data.phone_number:
+            result = await db.execute(
+                select(User).where(User.phone_number == user_data.phone_number)
+            )
+            if result.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="手机号已存在")
+
+        hashed_password = get_password_hash(user_data.password)
+        new_user = User(
+            username=user_data.username,
+            password=hashed_password,
+            phone_number=user_data.phone_number,
+            role=user_data.role or "USER",
+            enterprise_name=user_data.enterprise_name,
+            approval_status="APPROVED",
+            is_certified=True,
+        )
+
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+
+        logger.info(f"管理员创建用户: {new_user.username}, 角色: {new_user.role}")
+        return new_user
+
+    @staticmethod
+    async def update_user_quota(
+        db: AsyncSession,
+        user_id: str,
+        quota_data: QuotaUpdate
+    ) -> User:
+        """
+        更新用户额度
+
+        Args:
+            db: 异步数据库会话
+            user_id: 用户ID
+            quota_data: 额度更新数据
+
+        Returns:
+            User: 更新后的用户对象
+
+        Raises:
+            HTTPException: 用户不存在时抛出
+        """
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+
+        current_quota = user.quota or {}
+
+        if quota_data.operation == "set":
+            # 直接设置额度
+            new_quota = {
+                "lawyerLetters": quota_data.lawyer_letters if quota_data.lawyer_letters is not None else current_quota.get("lawyerLetters", 0),
+                "consultations": quota_data.consultations if quota_data.consultations is not None else current_quota.get("consultations", 0),
+            }
+        else:
+            # 增量更新
+            new_quota = {
+                "lawyerLetters": current_quota.get("lawyerLetters", 0) + (quota_data.lawyer_letters or 0),
+                "consultations": current_quota.get("consultations", 0) + (quota_data.consultations or 0),
+            }
+
+        user.quota = new_quota
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(user, "quota")
+        await db.commit()
+        await db.refresh(user)
+
+        logger.info(f"用户 {user.username} 额度更新: {new_quota}")
+        return user
 
     @staticmethod
     async def get_all_users(
