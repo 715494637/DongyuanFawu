@@ -419,6 +419,9 @@ export const api = {
   // 获取联系二维码
   async getContactQR() {
     const res = await fetch(`${API_BASE}/contact-qr`);
+    if (!res.ok) {
+      throw new Error(`获取联系二维码失败: ${res.status}`);
+    }
     return res.json();
   },
 
