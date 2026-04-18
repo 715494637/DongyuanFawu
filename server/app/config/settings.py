@@ -89,10 +89,10 @@ class Settings(BaseSettings):
     imagebb_api_key: str = Field(default="", description="ImageBB API 密钥")
 
     # ============================================
-    # Google Gemini AI 配置
+    # 通义千问 Qwen AI 配置
     # ============================================
-    gemini_api_key: str = Field(default="", description="Gemini API 密钥（后端存储，保护前端暴露）")
-    gemini_base_url: str = Field(default="", description="Gemini API 基础 URL（可选，用于代理）")
+    qwen_api_key: str = Field(default="", description="通义千问 API 密钥")
+    qwen_base_url: str = Field(default="https://dashscope.aliyuncs.com/compatible-mode/v1", description="通义千问 API 基础 URL")
 
     # ============================================
     # 微信公众号配置

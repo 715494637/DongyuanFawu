@@ -30,7 +30,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     """AI聊天响应模型"""
     response: str = Field(..., description="AI回复内容")
-    model: str = Field(default="gemini-3.1-flash-lite-preview", description="使用的模型")
+    model: str = Field(default="qwen-plus", description="使用的模型")
     error: Optional[str] = Field(default=None, description="错误信息（如果有）")
     error_code: Optional[str] = Field(default=None, description="错误代码")
 

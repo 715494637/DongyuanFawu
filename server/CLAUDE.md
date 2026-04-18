@@ -63,7 +63,7 @@ pytest --cov=app --cov-report=term-missing
 关键配置项 (`.env`):
 - `DATABASE_URL` - MySQL 连接字符串 (aiomysql)
 - `SECRET_KEY` - JWT 密钥
-- `GEMINI_API_KEY` / `GEMINI_BASE_URL` - Google Gemini AI
+- `QWEN_API_KEY` / `QWEN_BASE_URL` - 通义千问 Qwen AI
 - `IMAGEBB_API_KEY` - 图片上传服务
 - `WECHAT_APP_ID` / `WECHAT_APP_SECRET` - 微信公众号
 
