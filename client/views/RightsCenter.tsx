@@ -381,15 +381,18 @@ const RightsCenter: React.FC<RightsCenterProps> = ({ setCurrentView }) => {
                     <h3 className={status === 'UNLOCKED' ? 'font-black text-base text-white flex items-center gap-2' : 'font-black text-base text-slate-500 flex items-center gap-2'}>
                       <Star size={18} className={status === 'UNLOCKED' ? 'text-amber-400' : 'text-slate-600'} />专项法律服务定制
                     </h3>
-                    {status === 'UNLOCKED' && (
+                    {status === 'UNLOCKED' ? (
                       <span className="text-xs text-slate-400">
                         已选 <span className="font-bold" style={{ color: GOLD }}>{selectedProjects.length}</span> 项
                         ，还可选择 <span className="font-bold" style={{ color: activeLevel.selectable_projects_count > selectedProjects.length ? GOLD : '#FF6B6B' }}>
                           {Math.max(0, activeLevel.selectable_projects_count - selectedProjects.length)}
                         </span> 项
                       </span>
+                    ) : (
+                      <span className="text-xs text-slate-500">
+                        可选 <span className="font-bold text-slate-400">{activeLevel.selectable_projects_count}</span> 项
+                      </span>
                     )}
-                  </div>
 
                   <div className="grid grid-cols-1 gap-3.5">
                     {allProjects.map(proj => {
