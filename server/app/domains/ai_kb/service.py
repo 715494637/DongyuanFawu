@@ -122,12 +122,11 @@ class AIKnowledgeBaseService:
     @staticmethod
     async def speech_to_text(audio_data: bytes, mime_type: str = "audio/webm") -> dict:
         """
-        语音转文字（使用通义千问 Qwen-Audio，OpenAI 兼容接口）
+        语音转文字（使用 DashScope 原生多模态接口，qwen-audio-turbo）
         """
         import base64
 
         api_key = settings.qwen_api_key
-        base_url = settings.qwen_base_url or QWEN_BASE_URL
         model = "qwen-audio-turbo"
 
         if not api_key:
@@ -136,30 +135,23 @@ class AIKnowledgeBaseService:
 
         audio_b64 = base64.b64encode(audio_data).decode("utf-8")
 
+        # 使用 DashScope 原生多模态接口（兼容模式不支持 audio_url）
         payload = {
             "model": model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "audio_url",
-                            "audio_url": {
-                                "url": f"data:{mime_type};base64,{audio_b64}"
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": "请将上面的音频内容转录为文字。只输出转录的文字内容，不要添加任何解释或标点以外的额外内容。"
-                        }
-                    ]
-                }
-            ],
-            "temperature": 0.0,
-            "max_tokens": 4096
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"audio": f"data:{mime_type};base64,{audio_b64}"},
+                            {"text": "请将上面的音频内容转录为文字。只输出转录的文字内容，不要添加任何解释或标点以外的额外内容。"}
+                        ]
+                    }
+                ]
+            }
         }
 
-        url = f"{base_url}/chat/completions"
+        url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
         logger.info(f"调用通义千问语音转文字 API，音频大小: {len(audio_data)} bytes, 模型: {model}")
 
         try:
@@ -176,9 +168,13 @@ class AIKnowledgeBaseService:
                 data = response.json()
 
                 text = ""
-                if data.get("choices"):
-                    choice = data["choices"][0]
-                    text = choice.get("message", {}).get("content", "").strip()
+                choices = data.get("output", {}).get("choices", [])
+                if choices:
+                    content = choices[0].get("message", {}).get("content", [])
+                    for part in content:
+                        if isinstance(part, dict) and part.get("text"):
+                            text = part["text"].strip()
+                            break
 
                 logger.info(f"语音转文字成功，文字长度: {len(text)}")
                 return {"text": text, "error": None}
