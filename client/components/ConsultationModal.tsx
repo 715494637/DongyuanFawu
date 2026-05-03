@@ -18,22 +18,20 @@ const ConsultationModal: React.FC<ConsultationModalProps> = ({ isOpen, onClose }
       const fetchQR = async () => {
         setLoading(true);
         try {
-          const qrs = await api.getContactQR();
-          console.log('[ConsultationModal] 获取到二维码数据:', qrs);
+          const qrs = await api.getContactQR().catch(() => []);
           if (Array.isArray(qrs) && qrs.length > 0) {
             const randomIndex = Math.floor(Math.random() * qrs.length);
             setActiveQR({
               id: qrs[randomIndex].id,
               name: qrs[randomIndex].name,
               imageBase64: qrs[randomIndex].image_url || qrs[randomIndex].imageBase64,
-              createdAt: qrs[randomIndex].created_at || Date.now()
+              createdAt: qrs[randomIndex].created_at
             });
           } else {
-            console.warn('[ConsultationModal] 二维码列表为空');
             setActiveQR(null);
           }
         } catch (err) {
-          console.error('[ConsultationModal] 获取联系二维码失败:', err);
+          console.error('获取联系二维码失败:', err);
           setActiveQR(null);
         } finally {
           setLoading(false);
